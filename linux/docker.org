@@ -25,7 +25,16 @@ container从image创建. 它可以被启动,开始,停止,删除. 每个容器�
 7. -i -t 指定标准输入和输出
 * docker使用说明
 ** docker image相关命令
-Docker镜像就是一个只读的模板. Docker根据镜像来创建容器.
+Docker镜像就是一个只读的模板. Docker根据镜像来创建容器.一个镜像包括以下内容:
+
++ 所有的环境变量(ENV)
++ 当前工作目录(WORKDIR)
++ 定义的开放端口集合(PORT)
++ 所有的卷定义(VOLUME)
++ 容器入口点(ENTRYPOINT)
++ 命令和参数(CMD)
+  
+Docker镜像呈层级结构，若某些值没有在本层明确指定，则会从上一层镜像中继承。
 *** 镜像的实现原理
 Docker镜像是怎么实现增量的修改和维护的?
 每个镜像都由很多层次构成,Docker使用Union	FS将这些不同的层结合到一个镜像中去.
@@ -77,18 +86,59 @@ docker hub上有很多人创建的各种不同的images. 使用 ~docker search~ 
 *** 获取images
 
 我们可以使用 ~docker pull~ 命令来预先下载我们需要的image
-#+BEGIN_SRC sh
+#+BEGIN_SRC shell
     sudo docker pull ubuntu
 #+END_SRC
 上述命令实际上相当于
-#+BEGIN_SRC sh
+#+BEGIN_SRC shell
   sudo docker pull registry.hub.docker.com/ubuntu:latest
 #+END_SRC
 即从注册服务器 =registry.hub.docker.com= 的 =ubunut= 仓库下载标记为 =latest= 的镜像.
 
 若官方仓库注册服务器下载太慢,可以从其他仓库下载,但此时需要指定完整的仓库注册服务器地址
-#+BEGIN_SRC sh
+#+BEGIN_SRC shell
   sudo docker pull dl.dockerpool.com:5000/ubuntu:12.04
+#+END_SRC
+
+每个镜像都有一个摘要值,可以通过  =docker images --digiests= 来查看image对应的摘要
+#+BEGIN_SRC shell :results org
+  docker images --digests
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+REPOSITORY          TAG                 DIGEST                                                                    IMAGE ID            CREATED             SIZE
+silex/emacs         master              sha256:bc8ad6b899387fc145b6dbcc122a744a65903978d859bb18f9edfeebfec2d7c4   14571ed1613d        2 weeks ago         500MB
+ubuntu              latest              sha256:5f4bdc3467537cbbe563e80db2c3ec95d548a9145d64453b06939c4592d67b6d   113a43faa138        8 weeks ago         81.1MB
+centos              latest              sha256:3b37e941676e3a1f3752e9cdb1d37d1db37c9931fcbdd60339ea5f2134c85c0f   49f7960eb7e4        8 weeks ago         200MB
+busybox             latest              sha256:141c253bc4c3fd0a201d32dc1f493bcf3fff003b6df416dea4f41046e0f37d47   8c811b4aec35        2 months ago        1.15MB
+#+END_SRC
+
+我们可以使用这个摘要值来下载镜像，这能保证下载镜像的唯一性
+#+BEGIN_SRC shell :results org
+  docker pull base/archlinux@sha256:ad40853b5a41267138de587391960b9a0f4a3f20c37cb2a5001cd8b797aa0673
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+sha256:ad40853b5a41267138de587391960b9a0f4a3f20c37cb2a5001cd8b797aa0673: Pulling from base/archlinux
+dd22593c6335: Pulling fs layer
+2d0a93adad2c: Pulling fs layer
+a8e30b2d8506: Pulling fs layer
+6fa053f065b2: Pulling fs layer
+6fa053f065b2: Waiting
+2d0a93adad2c: Download complete
+6fa053f065b2: Verifying Checksum
+6fa053f065b2: Download complete
+a8e30b2d8506: Verifying Checksum
+a8e30b2d8506: Download complete
+dd22593c6335: Download complete
+dd22593c6335: Pull complete
+2d0a93adad2c: Pull complete
+a8e30b2d8506: Pull complete
+6fa053f065b2: Pull complete
+Digest: sha256:ad40853b5a41267138de587391960b9a0f4a3f20c37cb2a5001cd8b797aa0673
+Status: Downloaded newer image for base/archlinux@sha256:ad40853b5a41267138de587391960b9a0f4a3f20c37cb2a5001cd8b797aa0673
 #+END_SRC
 
 *** 创建自己的image
@@ -134,11 +184,54 @@ docker hub上有很多人创建的各种不同的images. 使用 ~docker search~ 
      #+END_SRC
      使用-t标记来指定新的image名称及tag
 
-     后面的 ~.~ 是Dockerfile所在的目录名称,当然也可以替换为一个绝对路径的目录
+     后面的 ~.~ 是Dockerfile所在的目录名称(docker默认在该路径中寻找名为Dockerfile的文件),或者是指向Dockerfile的路径也可以(不一定叫Dockerfile文件),甚至还可以是一个 *git地址！*
 
      我们可以看到dockfile中的指令被一条条的执行了. 每一步都创建了一个新的容器,当所有的指令都执行完毕之后,返回一个image id,并且所有的中间步骤所产生的容器都被删除和清理了.
 
      *注意:一个image不能超过127层*
+
+*** 查看别人是怎么创建image的？
+=docker history ${image}= 将会返回指定image在构建过程中所有执行过的命令。
+#+BEGIN_SRC shell :results org
+  docker history lujun9972/archlinuxcn.docker
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+IMAGE               CREATED             CREATED BY                                      SIZE                COMMENT
+9462714d994c        6 days ago          /bin/sh -c pacman -Syu --noconfirm && pacman…   10.1MB              
+<missing>           6 days ago          /bin/sh -c #(nop) ADD file:924b52f8e9afb079e…   18.7kB              
+<missing>           6 days ago          /bin/sh -c #(nop) ADD file:5b1ab05b934898a2a…   3.06kB              
+<missing>           6 days ago          /bin/sh -c #(nop)  CMD ["/bin/bash"]            0B                  
+<missing>           6 days ago          /bin/sh -c pacman --noconfirm -Syu     && rm…   159MB               
+<missing>           6 days ago          /bin/sh -c #(nop)  LABEL maintainer=ArchLinu…   0B                  
+<missing>           4 weeks ago         /bin/sh -c #(nop)  CMD ["/bin/bash"]            0B                  
+<missing>           4 weeks ago         /bin/sh -c :     && chmod 755 /etc     && pa…   44.9MB              
+<missing>           4 weeks ago         /bin/sh -c #(nop) ADD dir:34946d778ee95c934e…   175B                
+<missing>           4 weeks ago         /bin/sh -c #(nop) ADD dir:a34d7a3975e195fbec…   414MB               
+<missing>           4 weeks ago         /bin/sh -c #(nop)  LABEL maintainer=ArchLinu…   0B                  
+#+END_SRC
+
+这里 =CREATED BY= 就是构建每层的命令了，不过你可以看到这些命令都被截断了。 你可以通过 =--no-trunc= 来显示完整的命令。
+#+BEGIN_SRC shell :results org
+  docker history --no-trunc lujun9972/archlinuxcn.docker
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+IMAGE                                                                     CREATED             CREATED BY                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     SIZE                COMMENT
+sha256:9462714d994c154bf9d2f7bb96e00c700cc618f5beff29c3c6a4f176dc9b58ee   6 days ago          /bin/sh -c pacman -Syu --noconfirm && pacman -S archlinuxcn-keyring --noconfirm  && pacman -Scc --noconfirm                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    10.1MB              
+<missing>                                                                 6 days ago          /bin/sh -c #(nop) ADD file:924b52f8e9afb079e44786992624eeddb54419139150c58c08f97efb57fc2d6d in /etc/pacman.d/mirrorlist                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        18.7kB              
+<missing>                                                                 6 days ago          /bin/sh -c #(nop) ADD file:5b1ab05b934898a2a4c4e65754ad1edbff9bb92efda235332efb1726a550095d in /etc/pacman.conf                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                3.06kB              
+<missing>                                                                 6 days ago          /bin/sh -c #(nop)  CMD ["/bin/bash"]                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           0B                  
+<missing>                                                                 6 days ago          /bin/sh -c pacman --noconfirm -Syu     && rm -f       /var/cache/pacman/pkg/*       /var/lib/pacman/sync/*       /etc/pacman.d/mirrorlist.pacnew                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               159MB               
+<missing>                                                                 6 days ago          /bin/sh -c #(nop)  LABEL maintainer=ArchLinux Dockerimage Maintainers                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          0B                  
+<missing>                                                                 4 weeks ago         /bin/sh -c #(nop)  CMD ["/bin/bash"]                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           0B                  
+<missing>                                                                 4 weeks ago         /bin/sh -c :     && chmod 755 /etc     && pacman-key --init     && pacman-key --populate archlinux     && pacman --noconfirm -Syu --needed base     && pacman --noconfirm -Rsc          cryptsetup          device-mapper          dhcpcd          iproute2          jfsutils          linux          lvm2          man-db          man-pages          mdadm          nano          netctl          openresolv          pciutils          pcmciautils          reiserfsprogs          s-nail          systemd-sysvcompat          usbutils          vi          xfsprogs     && rm -rf       /usr/share/man/*       /var/cache/pacman/pkg/*       /var/lib/pacman/sync/*       /README       /etc/pacman.d/mirrorlist.pacnew   44.9MB              
+<missing>                                                                 4 weeks ago         /bin/sh -c #(nop) ADD dir:34946d778ee95c934e90e13e7f03eaf5ac42ced78fa513349e2a731bd74343eb in /                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                175B                
+<missing>                                                                 4 weeks ago         /bin/sh -c #(nop) ADD dir:a34d7a3975e195fbecaeaf0faf050c5a672fe492133dedd8f5256128d5db5010 in /                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                414MB               
+<missing>                                                                 4 weeks ago         /bin/sh -c #(nop)  LABEL maintainer=ArchLinux Dockerimage Maintainers                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          0B                  
+#+END_SRC
 
 *** 上传images到公共images仓库
 使用docker push上传images
@@ -155,7 +248,7 @@ docker hub上有很多人创建的各种不同的images. 使用 ~docker search~ 
 #+END_SRC
 
 *** 修改镜像标签
-使用 ~docker tag~ 命令可以修改镜像标签
+使用 ~docker tag~ 命令可以修改镜像标签,所谓修改镜像标签其实就是 *对镜像进行重命名操作*
 #+BEGIN_SRC sh
   sudo dockr tag 5db5f8471261 ouruser/sinatra:devel
 #+END_SRC
@@ -189,16 +282,41 @@ docker hub上有很多人创建的各种不同的images. 使用 ~docker search~ 
 
 容器是从镜像创建的运行实例. 它可以被启动,开始,停止,删除. 每个容器都是相互隔离的,保证安全的平台.
 
+Docker在创建容器时，会在镜像上再添加两层layer:一个初始层,包含了与容器相关的环境信息，如容器主机名，主机host信息等，
+还有一层是可读写层，Docker容器中进程的写时复制操作就是做用在这一层。
 *** 新建并启动容器
 使用命令 ~docker run~ 新建并启动一个容器
 
-下面这条命令使用ubuntu镜像作为模板启动一个容器,并启动bash shell允许用户进行交互
-#+BEGIN_SRC sh
-  sudo docker run -t -i --name ubuntu ubuntu /bin/bash
+容器在前台运行时，Docker会在容器初始化时将控制台重定向至STDIN、STDOUT和STDERR.
+
+但我们可以通过 =-a= 参数来控制标准挂载哪些输入输出流，比如
+#+BEGIN_SRC shell
+  docker run -a stdin -a stdout  --name ubuntu -it ubuntu /bin/bash
 #+END_SRC
-其中 ~-t~ 选项让Docker分配一个伪终端并绑定到容器的标准输出上.
+
+上面这个命令只挂了标准输入和标准输出，其中
+~-t~ 选项让Docker分配一个伪终端并绑定到容器的标准输出上.
 ~-i~ 则让容器的标准输入保持打开.
 ~--name 容器名~ 指定容器的名称
+
+需要说明的是，当标准输入/输入是通过重定向或者管道传入容器时，不能使用 =-t= 参数
+#+BEGIN_EXAMPLE
+  [lujun9972@T430S tmp]$   ls|docker run -it busybox cat
+  the input device is not a TTY
+  [lujun9972@T430S tmp]$   ls|docker run -i busybox cat
+  babel-nRWTJg
+  emacs1000
+  error.log
+  fcitx-socket-:0
+  hsperfdata_lujun9972
+  info.log
+  mozilla_lujun99720
+  NutstoreTmp0xyz
+  serverauth.ccvtYWQ1RD
+  shadowsocks-qt5
+  Temp-b0bdb25a-2d64-4f54-946d-f0cd05db2640
+#+END_EXAMPLE
+
 
 更多的时候,需要让Docker容器在后台以守护态（Daemonized）形式运行.此时,可以通过添加 ~-d~参数来实现.
 #+BEGIN_SRC sh
@@ -219,10 +337,89 @@ docker hub上有很多人创建的各种不同的images. 使用 ~docker search~ 
 7. 应用程序执行完毕后容器终止
 8. 容器也可能被 ~docker stop~ 终止
 
-*** 创建临时容器
+**** 创建临时容器
 在执行 ~docker run~ 时如果添加 =--rm= 标记,则容器会在终止后立刻删除.
 
 *注意 =--rm= 和 =-d= 不能同时使用*
+
+**** 设置命名空间
+默认情况下一个容器有自己独立的命名空间，但若需要将容器与主机或者多个容器相互访问时，则可能需要设置命名空间
+
+***** pid命名空间
+~--pid="XXX"~ 参数可以设置pid命名空间，相同pid命名空间的容器可以看到彼此的进程。
+
+~--pid="host"~ 表示使用宿主的PID命名空间
+
+***** UTS命名空间
+UTS命名空间用来设定主机名和域名
+
+~--uts="XXX"~ 参数可以设置uts命名空间.
+
+~--uts="host"~ 表示使用宿主的UTS命名空间,但一般不推荐这样设置，因为这表示容器具有了修改主机配置文件的权限。
+
+***** IPC命名空间
+IPC命名空间提供了相互隔离的命名共享内存、信号灯变量和消息队列
+
+~--ipc="XXX"~ 参数可以设置ipc命名空间
+
+~--ipc="container:<name/id>"~ 使用指定容器的IPC命名空间
+
+~--pid="host"~ 表示使用宿主的ipc命名空间
+
+
+**** 设备访问权
+有时候，在主机和特定容器之间共享设备可能非常重要。通过 =-device= 选项可以指定一个设备挂载进新容器中，比如
+#+BEGIN_SRC shell
+  docker -it --rm --device /dev/video0:/dev/video1 ubuntu:latest # 挂载位于/dev/video0位置的网络摄像头
+#+END_SRC
+
+**** 设置重启策略
+docker可以通过 =--restart= 参数设定重启策略，目前支持4种重启策略
+
++ no :: 退出后不再重启
++ on-failure[:max-retries] :: 当容器失败退出时重启,还可以设定最大重启次数
++ always :: 总是重启，而且每次Docker Daemon启动时都会启动容器
++ unless-stopped :: 类似always，但是在Docker Daemon启动时不会去启动 =stopped= 状态的容器
+                    
+docker的定时重启策略为指数回退策略，即后一次尝试重启的时间为前一次尝试重启时间的两倍。
+我们可以通过下面实验来验证这一点:
+#+BEGIN_SRC shell :results org
+  docker run -d --name backoff-test --restart always busybox date
+  sleep 120
+  docker logs -f backoff-test
+  docker stop backoff-test
+  docker rm backoff-test
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+ae0b8bbd1a1fda8677a1646520fe304fe2cd4ad42f1c2edba216d1d34179a58b
+Sun Aug  5 02:15:22 UTC 2018
+Sun Aug  5 02:15:23 UTC 2018
+Sun Aug  5 02:15:24 UTC 2018
+Sun Aug  5 02:15:25 UTC 2018
+Sun Aug  5 02:15:26 UTC 2018
+Sun Aug  5 02:15:29 UTC 2018
+Sun Aug  5 02:15:32 UTC 2018
+Sun Aug  5 02:15:39 UTC 2018
+Sun Aug  5 02:15:53 UTC 2018
+Sun Aug  5 02:16:19 UTC 2018
+Sun Aug  5 02:17:11 UTC 2018
+backoff-test
+backoff-test
+#+END_SRC
+
+**** 指定额外的安全选项
+Docker在容器创建(docker create)或运行(docker run)时能够通过 =--security-opt= 选项来指定Linux安全模块(LSM)的选项，常见的LSM包括SELinux和AppArmor.
+
+=--security-opt= 选项可以设置多次，其值的格式可以是:
+
++ label:user:<USERNAME> :: 设置SELinux用户标签
++ label:role:<ROLE> :: 设置SELinux角色标签
++ label:type:<TYPE> :: 设置SELinux的类型标签
++ label:level:<LEVEL> :: 设置SELinux的级别标签
++ label:disable :: 禁用SELinux标签限制
++ label:apparmor:<PROFILE> :: 应用一个AppArmor配置
 *** 终止容器
 可以使用 ~docker stop~ 来终止一个运行中的容器. 
 #+BEGIN_SRC sh
@@ -236,14 +433,19 @@ docker hub上有很多人创建的各种不同的images. 使用 ~docker search~ 
   sudo docker kill echo
 #+END_SRC
 
+默认 ~docker kill~ 会向指定容器发送SIGKILL信号，如果需要向容器发送特定的信号可以使用 =--signal= 参数
+#+BEGIN_SRC shell
+  docker kill --signal SIGKILL echo
+#+END_SRC
+
 *** 重新启动容器
 可以利用命令 ~docker start~ 来将一个已经终止的容器启动运行
 #+BEGIN_SRC sh
-  # sudo docker start -i 容器id/容器name
   sudo docker start  echo
 #+END_SRC
-
-其中，若带有 =-i= 参数则表示进入interactive模式
+start可以在启动时完成容器与主机IO流之间的重定向。 其中
++ =-i / --interactive= :: 进入interactive模式,即将挂载stdin
++ =-a / --attach= :: 挂载stdout、stderr并捕获信号
 
 此外, ~docker restart~ 命令会将一个运行态的容器终止,然后再重新启动它
 #+BEGIN_SRC sh
@@ -251,22 +453,102 @@ docker hub上有很多人创建的各种不同的images. 使用 ~docker search~ 
   sudo docker restart echo
 #+END_SRC
 
+若终止容器时容器内部出现异常，可能导致容器无法正常关闭，则我们可以通过 =-t/--time= 设置N秒后强制杀掉容器，默认为10秒
+#+BEGIN_SRC sh
+  sudo docker restart -t 5 echo
+#+END_SRC
+
 *** 查看容器信息
 通过 ~docker ps~ 命令可以查看容器信息
 
-+ 显示正在运行的容器
+**** 显示正在运行的容器
 
-  #+BEGIN_SRC sh
-    sudo docker ps
-  #+END_SRC
+#+BEGIN_SRC sh
+  sudo docker ps
+#+END_SRC
 
-+ 显示所有的容器,包括终止状态的容器
+**** 显示所有的容器,包括终止状态的容器
 
-  #+BEGIN_SRC sh
-    sudo docker ps -a
-  #+END_SRC
+#+BEGIN_SRC sh
+  sudo docker ps -a
+#+END_SRC
 
-*** 获取容器的输出信息
+**** 根据条件筛选容器
+
+=--filter= 可以用来筛选哪些容器需要被显示，可以从5个维度来筛选
+
++ id
+
++ label
+
++ name
+
++ exited
+
++ status :: 可以是 created/restarting/paused/exited
+            
+            
+#+BEGIN_SRC shell :results org
+  docker ps -a --filter=status=created
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+CONTAINER ID        IMAGE               COMMAND                   CREATED             STATUS              PORTS               NAMES
+98a9d8100fc1        3c09bddc26b1        "/bin/sh -c 'echo \"e…"   11 days ago         Created                                 unruffled_wilson
+9103874e80da        5bbbe403001d        "/bin/sh -c 'pacman …"    11 days ago         Created                                 unruffled_ramanujan
+#+END_SRC
+
+**** 只输出容器ID
+=--quiet= 参数可以只输出容器ID值，这个功能常在编写脚本时使用，比如批量stop/kill容器时
+*** 监控容器资源
+=docker stats CONTAINER= 可以实时监控容器资源，包括CPU使用率、内存使用率、网络吞吐量等信息
+#+BEGIN_SRC shell :results org
+  docker stats --no-stream 73380fe0cfb5
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+CONTAINER ID        NAME                     CPU %               MEM USAGE / LIMIT   MEM %               NET I/O             BLOCK I/O           PIDS
+73380fe0cfb5        determined_ardinghelli   0.00%               880KiB / 7.5GiB     0.01%               1.26kB / 0B         2.87MB / 0B         1
+#+END_SRC
+
+其中 =--no-stream= 表示只统计并显示一次资源数据，而不要实时监控
+
+而 =docker top CONTAINER [ps参数]= 则可以显示容器内运行进程的信息，相当于在容器内执行ps命令
+#+BEGIN_SRC shell :results org
+  docker top 73380fe0cfb5 axjf
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+PPID                PID                 PGID                SID                 TTY                 TPGID               STAT                UID                 TIME                COMMAND
+6812                6830                6830                6830                ?                   -1                  Ss                  0                   0:00                | \_ cat
+#+END_SRC
+
+其中 =ps参数= 可以是ps命令可用的任意参数
+
+而相比之下，使用 =docker exec ps= 命令则会多出一个 ps 进程
+#+BEGIN_SRC shell :results org
+  docker exec 73380fe0cfb5 ps -a
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+PID   USER     TIME  COMMAND
+    1 root      0:00 cat
+   14 root      0:00 ps -a
+#+END_SRC
+
+*** 获取容器的日志信息
+在设计日志记录架构时，你需要在效率和可靠性之间做取舍。下面是一些你要考虑的重点:
+
++ 使用什么传输协议传送日志？UDP速度快但不可靠，TCP可靠但速度慢
++ 网络中断后会发生什么事情？日志需要重传还是丢弃
++ 如何存储和备份日志信息？相比于文件系统，用数据库存储能够提供更高的可靠性和更有力的容错保障
++ 考虑日志的安全性，如何设置访问权限。
+  
+**** docker logs命令
 要获取容器的输出信息，可以通过 ~docker logs~ 命令
 #+BEGIN_SRC sh
   sudo docker logs echo
@@ -276,6 +558,58 @@ docker hub上有很多人创建的各种不同的images. 使用 ~docker search~ 
 #+BEGIN_SRC sh
   sudo docker logs -f echo
 #+END_SRC
+
+=--since= 可以用来截取日志，截取的范围是指定时间开始到现在为止所有的日志。时间格式可以是UNIX时间戳，或者是RFC3339时间表达式
+#+BEGIN_SRC sh
+  sudo docker logs --since "2018-07-04T12:34:53" echo
+#+END_SRC
+
+此外，也能使用 =--tail= 来截取最后N条日志
+#+BEGIN_SRC sh
+  sudo docker logs --tail=20 echo
+#+END_SRC
+
+
+不过要注意的是， =docker logs= 只能获取容器内应用输出到stdin和stderr的日志，若日志输出到了文件中，之只能使用 =docker exec XXX tail yyy= 来变通查看了。
+**** 容器的日志引擎
++ json-file
+
+  默认情况下，Docker使用json-file的日志引擎，它会捕获容器中进程的STDOUT和STDERR，将之保存以json的格式保存起来。
+
+  宿主机上拥有root权限的用户可以直接访问容器日志，可以通过下面命令来获取容器的日志路径
+  #+BEGIN_SRC shell :results org :dir /ssh:192.168.1.9:
+    docker inspect -f '{{.LogPath}}' aria2-service
+  #+END_SRC
+
+  #+BEGIN_SRC org
+  /var/lib/docker/containers/b017f3306ffd81ba2a2dd36298928c6955d48870281169c396c9175a57bc0b21/b017f3306ffd81ba2a2dd36298928c6955d48870281169c396c9175a57bc0b21-json.log
+  #+END_SRC
+  
++ syslog
+
+  Docker的另一个日志驱动可以是 syslog, 这中情况下 Docker 会将应用日志发送到宿主机上的syslog.
+
+  用户可以在启动容器时使用 ~--log-driver=syslog~ 来设置,比如
+  #+BEGIN_SRC shell :results org
+    docker run --rm --log-driver=syslog ubuntu date
+  #+END_SRC
+
+  #+RESULTS:
+  #+BEGIN_SRC org
+  Sun Jul 15 09:53:49 UTC 2018
+  #+END_SRC
+  
++ none
+
+  Docker还可以将日志驱动设置为 none，这种情况下，Docker会忽略应用程序生成的所有日志：
+  #+BEGIN_SRC shell :results org
+    docker run --rm --log-driver=none ubuntu date
+  #+END_SRC
+
+  #+RESULTS:
+  #+BEGIN_SRC org
+  Sun Jul 15 09:55:42 UTC 2018
+  #+END_SRC
 
 *** 进入容器
 在使用 ~-d~ 参数时,容器启动后会进入后台. 若需要进入容器进行操作,则可以使用 ~docker attach~ 命令或 ~nsenter~ 工具
@@ -317,8 +651,205 @@ docker hub上有很多人创建的各种不同的images. 使用 ~docker search~ 
 
 若要删除一个运行中的容器,可以添加 ~-f~ 参数. Docker会发送 =SIGKILL= 信号
 
-*** 探测容器
-使用 ~docker inspect~ 来探测容器参数
+*** 探测容器/镜像
+使用 ~docker inspect~ 来探测容器/镜像参数
+#+BEGIN_SRC shell :results org
+  docker inspect centos
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+[
+    {
+        "Id": "sha256:49f7960eb7e4cb46f1a02c1f8174c6fac07ebf1eb6d8deffbcb5c695f1c9edd5",
+        "RepoTags": [
+            "centos:latest"
+        ],
+        "RepoDigests": [
+            "centos@sha256:3b37e941676e3a1f3752e9cdb1d37d1db37c9931fcbdd60339ea5f2134c85c0f"
+        ],
+        "Parent": "",
+        "Comment": "",
+        "Created": "2018-06-04T22:19:34.475342266Z",
+        "Container": "ef04c6fb40e53318c38014531a0bb5647e2d659dbe8a5e375374d4bbac57a02d",
+        "ContainerConfig": {
+            "Hostname": "ef04c6fb40e5",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": false,
+            "AttachStderr": false,
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            ],
+            "Cmd": [
+                "/bin/sh",
+                "-c",
+                "#(nop) ",
+                "CMD [\"/bin/bash\"]"
+            ],
+            "ArgsEscaped": true,
+            "Image": "sha256:40ef8420eda09fa48ca36df234cb2b68387b5e13abb352e6390da642afe0351d",
+            "Volumes": null,
+            "WorkingDir": "",
+            "Entrypoint": null,
+            "OnBuild": null,
+            "Labels": {
+                "org.label-schema.schema-version": "= 1.0     org.label-schema.name=CentOS Base Image     org.label-schema.vendor=CentOS     org.label-schema.license=GPLv2     org.label-schema.build-date=20180531"
+            }
+        },
+        "DockerVersion": "17.06.2-ce",
+        "Author": "",
+        "Config": {
+            "Hostname": "",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": false,
+            "AttachStderr": false,
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            ],
+            "Cmd": [
+                "/bin/bash"
+            ],
+            "ArgsEscaped": true,
+            "Image": "sha256:40ef8420eda09fa48ca36df234cb2b68387b5e13abb352e6390da642afe0351d",
+            "Volumes": null,
+            "WorkingDir": "",
+            "Entrypoint": null,
+            "OnBuild": null,
+            "Labels": {
+                "org.label-schema.schema-version": "= 1.0     org.label-schema.name=CentOS Base Image     org.label-schema.vendor=CentOS     org.label-schema.license=GPLv2     org.label-schema.build-date=20180531"
+            }
+        },
+        "Architecture": "amd64",
+        "Os": "linux",
+        "Size": 199671138,
+        "VirtualSize": 199671138,
+        "GraphDriver": {
+            "Data": null,
+            "Name": "btrfs"
+        },
+        "RootFS": {
+            "Type": "layers",
+            "Layers": [
+                "sha256:bcc97fbfc9e1a709f0eb78c1da59caeb65f43dc32cd5deeb12b8c1784e5b8237"
+            ]
+        },
+        "Metadata": {
+            "LastTagTime": "0001-01-01T00:00:00Z"
+        }
+    }
+]
+#+END_SRC
+
+可以看到docker返回了超级多的信息，但是有时候我们只需要其中的某些信息，则可以使用 =-f= 参数来定义输出
+#+BEGIN_SRC shell :results org
+  docker inspect -f {{.ContainerConfig.Cmd}} centos
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+[/bin/sh -c #(nop)  CMD ["/bin/bash"]]
+#+END_SRC
+
+上面例子中 =.ContainerConfig.Cmd= 返回了一个数组，那么如果我希望获取数组中的某个元素怎么办呢？
+这个时候就需要用到 =index= 函数了
+#+BEGIN_SRC shell :results org
+  docker inspect -f '{{(index .ContainerConfig.Cmd 0)}}' centos
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+/bin/sh
+#+END_SRC
+
+
+*** 对容器进行重命名
+docker rename 旧容器名或ID 新容器名
+
+*** 主机与容器之间复制文件
+使用 =docker cp= 能够实现主机与容器之间复制文件
+
+#+BEGIN_SRC shell :results org
+  docker cp --help
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+
+Usage:	docker cp [OPTIONS] CONTAINER:SRC_PATH DEST_PATH|-
+	docker cp [OPTIONS] SRC_PATH|- CONTAINER:DEST_PATH
+
+Copy files/folders between a container and the local filesystem
+
+Options:
+  -a, --archive       Archive mode (copy all uid/gid information)
+  -L, --follow-link   Always follow symbol link in SRC_PATH
+#+END_SRC
+
+*** 更新容器的运行参数
+#+BEGIN_SRC shell :results org
+  docker update --help
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+
+Usage:	docker update [OPTIONS] CONTAINER [CONTAINER...]
+
+Update configuration of one or more containers
+
+Options:
+      --blkio-weight uint16        Block IO (relative weight), between 10
+                                   and 1000, or 0 to disable (default 0)
+      --cpu-period int             Limit CPU CFS (Completely Fair
+                                   Scheduler) period
+      --cpu-quota int              Limit CPU CFS (Completely Fair
+                                   Scheduler) quota
+      --cpu-rt-period int          Limit the CPU real-time period in
+                                   microseconds
+      --cpu-rt-runtime int         Limit the CPU real-time runtime in
+                                   microseconds
+  -c, --cpu-shares int             CPU shares (relative weight)
+      --cpus decimal               Number of CPUs
+      --cpuset-cpus string         CPUs in which to allow execution (0-3, 0,1)
+      --cpuset-mems string         MEMs in which to allow execution (0-3, 0,1)
+      --kernel-memory bytes        Kernel memory limit
+  -m, --memory bytes               Memory limit
+      --memory-reservation bytes   Memory soft limit
+      --memory-swap bytes          Swap limit equal to memory plus swap:
+                                   '-1' to enable unlimited swap
+      --restart string             Restart policy to apply when a
+                                   container exits
+#+END_SRC
+
+注意，docker update不是用来更新容器中的应用的，也不是用来让容器内应用程序重新读取配置的，而是修改容器运行时加上的那些运行参数的。
+
+*** 等待容器运行完毕
+执行 =docker wait 容器= 命令后，终端会被挂起，直到指定容器停止，然后输出容器的退出码。
+
+该命令一般用在容器监控、异常捕捉方面
+
+#+BEGIN_SRC shell :results org
+  docker wait --help
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+
+Usage:	docker wait CONTAINER [CONTAINER...]
+
+Block until one or more containers stop, then print their exit codes
+#+END_SRC
+
 ** Docker仓库与仓库注册服务器(registry)
 仓库是几种存放镜像文件的场所. 要注意它与仓库注册服务器之间的区别.
 
@@ -327,6 +858,16 @@ docker hub上有很多人创建的各种不同的images. 使用 ~docker search~ 
 + 一个镜像可以有不同标签
 
 一般来说,仓库可以被认为是一个具体的项目或目录.例如对于仓库地址 =dl.dockerpool.com/ubuntu= 来说, =dl.dockerpool.com= 是注册服务器地址, =ubuntu= 是仓库名.
+
+当使用公开的 Docker Registry 镜像构建自己的私有仓库时，默认的镜像存储位置为 =/var/lib/registry=, 因此可以将宿主机上的目录挂载到该位置从而在删掉registry容器后依然能够保留推送到该私有仓库中的镜像
+#+BEGIN_SRC shell :results org :dir /ssh:lujun9972@192.168.1.9:
+  mkdir -p /media/usb0/docker_registry
+  docker run -d -p 5000:5000 --restart=always --name registry -v /media/usb0/docker_registry:/var/lib/registry registry
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+#+END_SRC
 
 *** 登录仓库注册服务器
 可以通过执行 ~docker login~ 命令来输入用户名、密码和邮箱来完成注册和登录.注册成功后,本地用户目录的 =.dockercfg= 中将保存用户的认证信息.
@@ -462,6 +1003,37 @@ docker加载的数据卷默认是读写权限,但我们可以通过在 ~-v 容�
 
 如果要删除一个数据卷,必须在删除最后一个还挂载着它的容器时使用 ~docker rm -v~ 命令来指定同时删除关联的容器.
 
+*** 管理数据卷的docker volume命令
+#+BEGIN_SRC shell :results org
+  docker volume --help
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+
+Usage:	docker volume COMMAND
+
+Manage volumes
+
+Commands:
+  create      Create a volume
+  inspect     Display detailed information on one or more volumes
+  ls          List volumes
+  prune       Remove all unused local volumes
+  rm          Remove one or more volumes
+
+Run 'docker volume COMMAND --help' for more information on a command.
+#+END_SRC
+
+#+TABLE:docker volume命令说明
+| 命令           | 说明                 |
+|----------------+----------------------|
+| docker create  | 创建一个数据卷       |
+| docker inspect | 查看数据卷的详细说明 |
+| docker ls      | 列出本机全部的数据卷 |
+| docker prune   | 清除无用的数据卷     |
+| docker rm      | 删除指定的数据卷     |
+
 ** docker中的网络介绍
 
 *** docker网络相关的命令列表
@@ -474,12 +1046,129 @@ docker加载的数据卷默认是读写权限,但我们可以通过在 ~-v 容�
 + --iptables=true|false :: 决定启动docker服务时,是否添加转发策略到iptables的FORWARD链上.(参见--icc选项)
 + --mtu=BYTES :: 指定MTU-接口允许接受的最大传输单元
 + --dns=IP_ADDRESS :: 设定DNS服务器IP
-+ --dns-search=DOMAIN :: 设定容器的搜索域
++ --dns-search=DOMAIN :: 设定容器的搜索域,当该选项被设置，在查询时，任何不包括已知顶级域名(比如.com/.cn)的主机名会自动加上该后缀。
 + -h HOSTNAME / --hostname=HOSTNAME :: 主机配置
 + --link=CONTAINER_NAME:ALIAS :: 与其他容器进行互联,其中其他容器在容器中以ALIAS为名
 + --net=bridge|none|container:NAME_OR_ID|host :: 桥接配置
 + -p SPEC / --publish=SPEC :: 映射容器端口到宿主主机
 + -P / --publish-all=true|false :: 映射容器端口到宿主主机
++ network :: 管理网络的子命令
+
+*** 管理网络的docker network子命令
+#+BEGIN_SRC shell :results org
+  docker network --help
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+
+Usage:	docker network COMMAND
+
+Manage networks
+
+Commands:
+  connect     Connect a container to a network
+  create      Create a network
+  disconnect  Disconnect a container from a network
+  inspect     Display detailed information on one or more networks
+  ls          List networks
+  prune       Remove all unused networks
+  rm          Remove one or more networks
+
+Run 'docker network COMMAND --help' for more information on a command.
+#+END_SRC
+
+docker network 本身还有几个自己的子命令。
+
+#+TABLE:docker network命令的说明
+| 命令                               | 说明                     |
+|------------------------------------+--------------------------|
+| network connect 网络 容器          | 连接一个容器到指定网络   |
+| network create  网络 [-d 网络类型] | 创建一个网络             |
+| network disconnect 网络容器        | 指定容器从一个网络中断开 |
+| network inspect 网络               | 显示指定网络的详细信息   |
+| network ls                         | 显示所有的Docker网络     |
+| network prune                      | 删除所有未用的网络       |
+| network rm 网络                    | 删除指定网络             |
+
+#+BEGIN_SRC shell :results org
+  eval $(docker-machine env host1)
+  echo 创建一个名为network-bridge的网络
+  docker network create network-bridge
+  echo 再创建一个名为network-useless的网络
+  docker network create network-useless
+  echo 显示network-bridge的详细信息
+  docker network inspect network-bridge
+  echo 创建一个名为sleep的容器
+  docker run -d --name sleep alpine sleep 10
+  echo 将sleep容器加入network-bridge网络中
+  docker network connect network-bridge sleep
+  echo 显示所有docker网络
+  docker network ls
+  echo 删除未用的网络
+  yes|docker network prune
+  echo 将sleep容器从network-bridge中断开
+  docker network disconnect network-bridge sleep
+  echo 删除network-bridge网络
+  docker network rm network-bridge
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+创建一个名为network-bridge的网络
+b065c1b3890d79fc13e4d003a7b5a3bdb3fc3d6c7cba0393f0a6bf4013721636
+再创建一个名为network-useless的网络
+0a48532a84be42ff93e618758ca8b36100fae82909b4c77164708da750dc615c
+显示network-bridge的详细信息
+[
+    {
+        "Name": "network-bridge",
+        "Id": "b065c1b3890d79fc13e4d003a7b5a3bdb3fc3d6c7cba0393f0a6bf4013721636",
+        "Created": "2018-08-24T23:03:15.475915419Z",
+        "Scope": "local",
+        "Driver": "bridge",
+        "EnableIPv6": false,
+        "IPAM": {
+            "Driver": "default",
+            "Options": {},
+            "Config": [
+                {
+                    "Subnet": "172.19.0.0/16",
+                    "Gateway": "172.19.0.1"
+                }
+            ]
+        },
+        "Internal": false,
+        "Attachable": false,
+        "Ingress": false,
+        "ConfigFrom": {
+            "Network": ""
+        },
+        "ConfigOnly": false,
+        "Containers": {},
+        "Options": {},
+        "Labels": {}
+    }
+]
+创建一个名为sleep的容器
+e264450f91fe852ebab63a3a5647a43a8730b59e860beee3e57e0f13d13c18aa
+将sleep容器加入network-bridge网络中
+显示所有docker网络
+NETWORK ID          NAME                DRIVER              SCOPE
+7db4156f35f5        bridge              bridge              local
+213ef497e043        host                host                local
+b065c1b3890d        network-bridge      bridge              local
+0a48532a84be        network-useless     bridge              local
+a24eef5aaaa2        none                null                local
+删除未用的网络
+WARNING! This will remove all networks not used by at least one container.
+Are you sure you want to continue? [y/N] Deleted Networks:
+network-useless
+
+将sleep容器从network-bridge中断开
+删除network-bridge网络
+network-bridge
+#+END_SRC
 
 *** docker创建容器网络的过程
 
@@ -493,28 +1182,16 @@ docker加载的数据卷默认是读写权限,但我们可以通过在 ~-v 容�
 
 5. 完成这些后,容器可以使用eth0虚拟网卡来连接其他容器和其他网络了
 
-可以为特殊容器设置特定的参数:
-
-+ --net=bridge
-
-  连接到默认的docker0网桥
-
-+ --net=host
-
-  告诉docker不要将容器放到隔离的网络堆栈中,即容器直接使用host相同的网络
-
-+ --net=container:NAME_OR_ID
-
-  告诉docker将新容器进程放到一个已存在容器的网络堆栈中,两者共享ip地址和端口,他们之间还可以通过环回接口通信
-
-+ --net=none
-
-  告诉docker将新容器放在自己的网络堆栈中,但是不要配置它的网络. 其类似vmware的host-only,可以让你创建任何自定义的配置.
-
 *** 映射内部容器端口到host端口
 默认情况下,容器可以建立到外部网络的连接,但是外部网络无法连接到容器.
 
 若向容器接受外部连接,则需要在docker run执行的时候就指定对应选项
+
++ --expose PORT / --expose PORT/tcp / --expose PORT/udp
+  
+  docker run 命令提供了一个 --expose 选项，能够设置容器想要开放,但没有在Dockerfile中注明的端口.
+  
+  --expose 注明的端口会添加到 -P 选项的端口列表中。
 
 + -P --publish-all=true|false
 
@@ -535,7 +1212,8 @@ docker加载的数据卷默认是读写权限,但我们可以通过在 ~-v 容�
     sudo docker run -d -p 127.0.0.1:5000:5000/udp training/webapp python app.py
   #+END_SRC
 
-*如果希望永久改变绑定的主机ip地址,可以在docker配置中指定--ip=IP_ADDRESS*
+  *如果希望永久改变绑定的主机ip地址,可以在docker配置中指定--ip=IP_ADDRESS*
+
 
 *** 查看端口映射
 使用 ~docker port~ 来查看当前映射的端口设置,还能查看绑定到的地址
@@ -544,19 +1222,133 @@ docker加载的数据卷默认是读写权限,但我们可以通过在 ~-v 容�
 #+END_SRC
 
 *** 容器间互联
-
+**** 使用 =--link= 进行互联
 运行 ~docker run~ 是使用 =--link= 参数可以让容器之间安全的进行交互.
 
-+ --link=CONTAINER_NAME:ALLIAS
+其语法为 ~--link=CONTAINER_NAME:ALLIAS~
 
-  该选项会在创建容器时时候添加一个其他容器CONTAINER_NAME的主机到/etc/hosts文件中, 让新容器的进程可以使用主机名ALIAS就可以连接它.
-  
+该选项会在创建容器时时候添加一个其他容器CONTAINER_NAME的主机到/etc/hosts文件中, 让新容器的进程可以使用主机名ALIAS就可以连接它.
+
 #+BEGIN_SRC sh
   sudo docker run -d --name db lujun9972/mysql
   sudo docker run -d -P --name web --link db:db lujun9972/webapp python app.py
 #+END_SRC
 
 *在通过 ~-icc=false~ 关闭网络访问后,还可以通过 ~--link=CONTAINER_NAME:ALIAS~ 选项来访问容器的开放端口*
+
+Docker 在用 =--link= 连接容器时，还会创建一系列的的环境变量，来帮助启动的容器发现目标容器公开的IP和服务端口。
+这些环境变量包括：
+
++ <ALIAS>_NAME
++ <ALIAS>_PORT
++ <ALIAS>_PORT_<EXPOSEDPORT>_TCP
++ <ALIAS>_PORT_<EXPOSEDPORT>_TCP_PROTO
++ <ALIAS>_PORT_<EXPOSEDPORT>_TCP_PORT
++ <ALIAS>_PORT_<EXPOSEDPORT>_TCP_ADDR
+
+比如
+#+BEGIN_SRC shell :results org :dir /ssh:192.168.1.9:
+  docker run --rm  --link=aria2-service:test busybox env
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+HOSTNAME=88e33ba5c741
+TEST_PORT=tcp://172.17.0.2:6800
+TEST_PORT_6800_TCP=tcp://172.17.0.2:6800
+TEST_PORT_6800_TCP_ADDR=172.17.0.2
+TEST_PORT_6800_TCP_PORT=6800
+TEST_PORT_6800_TCP_PROTO=tcp
+TEST_PORT_51413_TCP=tcp://172.17.0.2:51413
+TEST_PORT_51413_TCP_ADDR=172.17.0.2
+TEST_PORT_51413_TCP_PORT=51413
+TEST_PORT_51413_TCP_PROTO=tcp
+TEST_NAME=/focused_morse/test
+HOME=/root
+#+END_SRC
+**** 使用 --net 共享网络命名空间
+
++ --net=none
+
+  告诉docker将新容器放在自己的网络堆栈中,但是不要配置它的网络. 其类似vmware的host-only,可以让你创建任何自定义的配置.
+
++ --net=bridge
+
+  连接到默认的docker0网桥,这是docker启动容器时的默认值
+
++ --net=host
+
+  告诉docker不要将容器放到隔离的网络堆栈中,即容器直接使用host相同的网络.
+
+  例如,我们可以做个比较：
+  #+BEGIN_SRC shell :results org :dir /ssh:192.168.1.9:
+    ip link list
+  #+END_SRC
+
+  #+BEGIN_SRC org
+  1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+      link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+  2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP mode DEFAULT group default qlen 1000
+      link/ether 02:01:57:df:77:3d brd ff:ff:ff:ff:ff:ff
+  3: docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default 
+      link/ether 02:42:21:ca:10:79 brd ff:ff:ff:ff:ff:ff
+  165: vethd96edba@if164: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master docker0 state UP mode DEFAULT group default 
+      link/ether f2:4d:94:b2:68:4a brd ff:ff:ff:ff:ff:ff link-netnsid 2
+  227: vetha522e28@if226: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master docker0 state UP mode DEFAULT group default 
+      link/ether 2a:c3:60:73:81:50 brd ff:ff:ff:ff:ff:ff link-netnsid 0
+  #+END_SRC
+  
+  与
+
+  #+BEGIN_SRC shell :results org :dir /ssh:192.168.1.9:
+    docker run --rm --net=host busybox ip link list
+  #+END_SRC
+
+  #+BEGIN_SRC org
+  1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue qlen 1000
+      link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+  2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq qlen 1000
+      link/ether 02:01:57:df:77:3d brd ff:ff:ff:ff:ff:ff
+  3: docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue 
+      link/ether 02:42:21:ca:10:79 brd ff:ff:ff:ff:ff:ff
+  165: vethd96edba@if164: <BROADCAST,MULTICAST,UP,LOWER_UP,M-DOWN> mtu 1500 qdisc noqueue master docker0 
+      link/ether f2:4d:94:b2:68:4a brd ff:ff:ff:ff:ff:ff
+  227: vetha522e28@if226: <BROADCAST,MULTICAST,UP,LOWER_UP,M-DOWN> mtu 1500 qdisc noqueue master docker0 
+      link/ether 2a:c3:60:73:81:50 brd ff:ff:ff:ff:ff:ff
+  #+END_SRC
+  
+  这两个的输出是一样的
+
++ --net=container:NAME_OR_ID
+
+  告诉docker将新容器进程放到一个已存在容器的网络命名空间中,两者共享ip地址和端口,他们之间还可以通过环回接口通信.
+
+  例如,我们可以做个比较：
+  #+BEGIN_SRC shell :results org :dir /ssh:192.168.1.9:
+    docker exec top ip link list
+  #+END_SRC
+
+  #+BEGIN_SRC org
+  1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue qlen 1000
+      link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+  246: eth0@if247: <BROADCAST,MULTICAST,UP,LOWER_UP,M-DOWN> mtu 1500 qdisc noqueue 
+      link/ether 02:42:ac:11:00:04 brd ff:ff:ff:ff:ff:ff
+  #+END_SRC
+  
+  与
+  #+BEGIN_SRC shell :results org :dir /ssh:192.168.1.9:
+    docker run --rm --net=container:top busybox ip link list
+  #+END_SRC
+
+  #+BEGIN_SRC org
+  1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue qlen 1000
+      link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+  246: eth0@if247: <BROADCAST,MULTICAST,UP,LOWER_UP,M-DOWN> mtu 1500 qdisc noqueue 
+      link/ether 02:42:ac:11:00:04 brd ff:ff:ff:ff:ff:ff
+  #+END_SRC
+  
+  结果是一样的
 
 *** 配置DNS
 
@@ -576,11 +1368,15 @@ docker提供了一些选项来动态的配置他们:
 
 + --dns=IP_ADDRESS
 
-  添加dns服务器到容器的/etc/resolv.conf中,让容器用这ip地址来解析所有不在/etc/hosts中的主机名
+  添加dns服务器到容器的/etc/resolv.conf中,让容器用这ip地址来解析所有不在/etc/hosts中的主机名,可以在启动Docker后台进程时用来设置默认值。
 
 + --dns-search=DOMAIN
 
-  设定容器的搜索域, 例如,当搜索域为.example.com时,会在搜索host主机名时,DNS不仅搜索host,还会搜索host.example.com
+  设定容器的搜索域, 例如,当搜索域为.example.com时,会在搜索host主机名时,DNS不仅搜索host,还会搜索host.example.com,可以在启动Docker后台进程时用来设置默认值。
+
++ --add-host=HOST:IP
+
+  自定义主机到IP地址的映射关系，可以设置多次以配置多个映射关系，但不能在启动Docker后台进程时设置默认值。
 *** 定制docker0
 docker服务默认会创建一个docker0接口,用于在linux内核层桥接所有容器的虚拟网卡和host物理网卡.
 
@@ -632,6 +1428,122 @@ docker允许指定docker0的ip地址和子网掩码,还能定义MTU(接口允许
    #+END_SRC
 
    
+** docker 集群相关命令
+*** 管理集群的docker swarm命令
+docker swarm命令与docker node、docker service命令共同提供集群管理编排能力
+
+#+BEGIN_SRC shell :results org
+  docker swarm --help
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+
+Usage:	docker swarm COMMAND
+
+Manage Swarm
+
+Commands:
+  ca          Display and rotate the root CA
+  init        Initialize a swarm
+  join        Join a swarm as a node and/or manager
+  join-token  Manage join tokens
+  leave       Leave the swarm
+  unlock      Unlock swarm
+  unlock-key  Manage the unlock key
+  update      Update the swarm
+
+Run 'docker swarm COMMAND --help' for more information on a command.
+#+END_SRC
+
+#+TABLE: swarm命令说明
+| 命令       | 说明                                                                  |
+|------------+-----------------------------------------------------------------------|
+| init       | 初始化集群                                                            |
+| join       | 以workder(node)或manager的身份加入集群,身份根据join token的不同而不同 |
+| join-token | 管理join token                                                        |
+| update     | 更新集群                                                              |
+| leave      | 退出集群                                                              |
+
+*** 管理节点的docker node命令
+docker node是一个集群管理命令，它也有很多子命令
+
+#+BEGIN_SRC shell :results org
+  docker node --help
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+
+Usage:	docker node COMMAND
+
+Manage Swarm nodes
+
+Commands:
+  demote      Demote one or more nodes from manager in the swarm
+  inspect     Display detailed information on one or more nodes
+  ls          List nodes in the swarm
+  promote     Promote one or more nodes to manager in the swarm
+  ps          List tasks running on one or more nodes, defaults to current node
+  rm          Remove one or more nodes from the swarm
+  update      Update a node
+
+Run 'docker node COMMAND --help' for more information on a command.
+#+END_SRC
+
+docker node命令只能在Swarm的管理节点上才能运行
+
+#+TABLE: docker node的命令说明
+| 命令         | 说明                          |
+|--------------+-------------------------------|
+| node promoto | 提升节点为manager节点         |
+| node demote  | 将集群中指定的manager节点降权 |
+| node inspect | 显示节点详细信息              |
+| node update  | 更新节点属性                  |
+| node ps      | 显示集群中正在运行的节点      |
+| node ls      | 显示集群中全部节点            |
+| node rm      | 从集群中删除指定节点                    |
+
+*** 管理服务的docker service
+docker service用于管理集群中的服务
+#+BEGIN_SRC shell :results org
+  docker service --help
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+
+Usage:	docker service COMMAND
+
+Manage services
+
+Commands:
+  create      Create a new service
+  inspect     Display detailed information on one or more services
+  logs        Fetch the logs of a service or task
+  ls          List services
+  ps          List the tasks of one or more services
+  rm          Remove one or more services
+  rollback    Revert changes to a service's configuration
+  scale       Scale one or multiple replicated services
+  update      Update a service
+
+Run 'docker service COMMAND --help' for more information on a command.
+#+END_SRC
+
+该命令必须在 swarm manager 上执行
+
+#+TABLE: service命令说明
+
+| 命令            | 说明                  |
+|-----------------+-----------------------|
+| service create  | 创建service           |
+| service inspect | 取得service详细信息   |
+| service ps      | 获取service的任务信息 |
+| service ls      | 获取service列表       |
+| service rm      | 删除指定service       |
+| service scale   | 调整service的replicas |
+| service update  | 更新service             |
 * 资源限制
 
 ** CPU
@@ -656,6 +1568,10 @@ docker允许指定docker0的ip地址和子网掩码,还能定义MTU(接口允许
 3. 当所有的指令都执行完毕之后,返回最终的镜像id. 所有的中间步骤产生的容器都被删除和清理了.
 
 4. 注意,一个镜像不能超过127层
+
+5. 注意，docker build构建镜像时会把指定目录(一般为Dockerfile所在目录)作为构建环境的上下文通过tar文件传递给Docker守护进程。
+   docker的CS架构，使得只有构建环境上下文中的文件/目录才能被ADD/COPY命令所应用。
+   为了从构建环境的上下文中排除不必要的文件，可以使用 =.dockerignore= 文件
 
 ** Dockerfile基础语法
 + =#= 用来注释
@@ -691,9 +1607,10 @@ Dockerfile由一行行命令语句组成,并且支持以 =#= 开头的注释行.
 *** RUN
 每条 ~RUN~ 指定都将在当前镜像基础上执行指定命令,并提交为新的镜像.当命令较长时可以使用 =\= 来换行
 
-+ RUN command :: 在shell终端中运行命令,即 =/bin/sh -c=
++ RUN command :: 在shell终端中运行命令,即 =/bin/sh -c=, *这也意味着镜像中必须包含/bin/sh才行*
   
-+ RUN ["executable","param1","param2"...] :: 使用exec执行
++ RUN ["executable","param1","param2"...] :: 使用exec执行, *这种情况下则需要注意环境变量的问题，它不会加载环境变量中的数据*
+     
 
 *** EXPOSE
 告诉Docker服务端容器暴露的端口号,供互联系统使用. 在启动容器时需要 =-P= 选项,Docker主机会自动分配一个端口转发到指定的端口.
@@ -706,21 +1623,111 @@ Dockerfile由一行行命令语句组成,并且支持以 =#= 开头的注释行.
 指定一个环境变量,会被后续 ~RUN~ 指令使用,并在容器运行时保持
 
 + ENV key value
+  
++ ENV key1=value1 key2=value2 ...
+
+ENV声明的环境变量不仅对产生的容器有效，而且还能够在其他Dockerfile的指令中使用，例如
+#+BEGIN_EXAMPLE
+  ENV VERSION="1.0"
+  LABEL base.version=${VERSION}
+#+END_EXAMPLE
+
+*** ARG
+
+类似ENV，ARG能够指定构建镜像时的变量，该变量能够在在其他Dockerfile的指令中使用，但与ENV不同的是，它不能在容器中被访问。例如
+#+BEGIN_SRC shell
+  ARG _USER="arch"
+  ARG _UID="1000"
+  RUN useradd -m  -u ${_UID}  ${_USER}
+#+END_SRC
+
+Docker引入ARG的意义在于，ARG中指定的参数值可以被 =docker build= 中的 =--build-arg= 参数所覆盖，从而起到动态构建镜像的目的
+
+比如下面这个构建语句使用当前用户的用户名和UID来替代Dockerfile中的_USER和_UID的值
+#+BEGIN_SRC shell
+  docker build --tag test_arg --build-arg=_USER=$USER --build-arg=_UID=$UID .
+#+END_SRC
 
 *** ADD
-将复制指定的<src>到容器中的<dest>. 其中<src>可以是Dockerfile所在目录的一个相对路径也可以是一个URL,还可以是一个tar文件(会自动解压为目录)
+#+BEGIN_EXAMPLE
+  ADD src dest
+#+END_EXAMPLE
 
-+ ADD src dest
+将复制指定的<src>到容器中的<dest>. 其中<src>可以是Dockerfile所在目录的一个相对路径也可以是一个URL,还可以是一个tar文件(会自动解压为目录)
+在src标记的路径中，还支持通配符
+
+<dest>是容器中的一个目录，且若 <dest>目录不存在，ADD命令会自动创建该目录
+
+1. src指定的路径必须存在于Dockerfile所在目录。
+
+   例如，下面所给定的路径就是非法路径：
+   #+BEGIN_EXAMPLE
+     ADD ../something /something
+   #+END_EXAMPLE
+
+   因为在Dockerfile执行时，Docker Daemon会读取Dockerfile所在目录的所有数据。如果ADD命令使用的文件在此目录中不存在，那么Daemon将找不到指定文件。
+
+2. 如果src指定的是URL，并且dest所指定的路径没有以“/”结尾，那么URL下载的数据将直接覆盖dest所给定的文件。
+
+3. 如果src指定的是URL，并且dest所指定的路径是以“/”结尾的。那么URL下载后的数据将直接写入dest所指定的目录中，例如：
+
+   #+BEGIN_EXAMPLE
+     ADD http://example.com/foobar /
+   #+END_EXAMPLE
+
+   ADD命令将会下载foobar目录，并且将此目录放入容器的根目录，结果是在容器中出现/footbar目录。
+
+4. 如果src指向的是一个目录，那么ADD指令将包括元数据在内的所有数据复制到容器中dest所指定的文件中，但src所指定的目录本身不会被复制进去，只会复制此目录下的文件。
+
+5. 如果src指向的是一个已知格式的压缩文件，例如，gzip、bzip2或者xz格式的文件。当添加到容器之后，会自动执行解压缩动作。而从URL中下载的压缩文件则不会执行解压缩。
+
+6. 如果src使用通配符指定了多个文件，那么此时dest必须是一个以“/”结尾的目录。
+
+7. 如果dest指向的路径没有以“/”结尾，那么这个路径指向的文件将会被src指定的文件覆盖。
+
+8. 如果dest指向的路径不存在，那么此路径中所涉及的父级目录都将会被创建。
+
+9. 当src指向的URL没有下载权限时，首先需要使用RUN wget或者RUN curl获取文件。
+
+10. 当ADD命令所标记的文件发生变化时，从变化的那个ADD命令开始，保存在缓存中的镜像将会失效，同时RUN命令产生的缓存镜像也会失效。
 
 *** COPY
 复制本地主机的<src>(必须为Dockerfile所在目录的相对路径)到容器中的<dest>
 
-+ COPY src dest
+#+BEGIN_EXAMPLE
+  COPY src dest
+#+END_EXAMPLE
 
+1. src指定的路径必须存在于Dockerfile所在目录。
+
+   例如，下面所给定的路径就是非法路径：
+   #+BEGIN_EXAMPLE
+     ADD ../something /something
+   #+END_EXAMPLE
+
+   当Dockerfile执行时，Docker Daemon会读取Dockerfile所在目录的所有数据。所以如果COPY命令指定的文件在此目录中不存在，那么Daemon将找不到指定文件。
+
+2. 如果src指向的是一个目录，那么COPY命令将包括元数据在内的所有数据复制到容器中dest所指定的文件中。但src所指定的目录本身不会被复制进去，只会复制此目录下的文件。
+
+3. 如果src使用通配符指定了多个文件，那么此时dest必须是一个以“/”结尾的目录。
+
+4. 如果dest指向的路径没有以“/”结尾，那么这个路径指向的文件将会被src指定的文件覆盖。
+
+5. 如果dest指向的路径不存在，那么此路径中所涉及的父级目录都将会被创建。
+
+6. 如果使用STDIN输入Dockerfile内容，那么COPY命令将失效，例如：
+
+   #+BEGIN_EXAMPLE
+     Docker build - < somefile
+   #+END_EXAMPLE
+
+   此时COPY命令将无法使用。
 *** VOLUME
 创建一个可以从本地主机或其他容器挂载的挂载点,一般用来存放数据库和需要保持的数据等
 
 + VOLUME ["/volume-dir"]
+  
+注意： *在Dockerfile中声明挂载点后，那么以后对该挂载点中文件的操作都不会生效！* 因此一般来说只会在 =Dockerfile= 结尾处声明挂载点。
 
 *** WORKDIR
 为后续的 ~RUN~, ~CMD~, ~ENTRYPOINT~ 指令配置工作目录.
@@ -738,6 +1745,32 @@ Dockerfile由一行行命令语句组成,并且支持以 =#= 开头的注释行.
 
 + ONBUILD [INSTRUCTION]
 
+*** USER
+指定运行容器时的用户名或UID,后续的 ~RUN~ 也会使用指定用户.
+
+当服务不需要管理员权限时,可以通过该命令指定运行用户.并且可以在之前创建所需要的用户.
+
++ USER user-name
+  
+在没有使用 =--userns-remap= 来映射USER namespace的情况下，容器中的用户和主机上的用户共享同一个用户ID空间。例如
+#+BEGIN_SRC shell
+  echo "hello" >/tmp/test.txt
+  chmod 600 /tmp/test.txt
+  sudo chown root:root /tmp/test.txt
+  docker run --rm -v /tmp/test.txt:/tmp/test.txt -u nobody ubuntu cat /tmp/test.txt # 会提示无权限
+  docker run --rm -v /tmp/test.txt:/tmp/test.txt -u root ubuntu cat /tmp/test.txt # 运行正常
+
+#+END_SRC
+
+*** 设置命令执行环境的SHELL命令
+在Docker构建过程中，默认使用 =/bin/sh= 作为shell环境，Windows下则默认使用 =cmd= 作为shell环境。
+
+但有时候需要使用其他SHELL执行RUN的内容，则可以使用SHELL指定让Docker更换shell环境
+
+比如，下面命令使用 =powershell= 作为shell环境
+#+BEGIN_EXAMPLE
+  SHELL ["powershell", "-command"]
+#+END_EXAMPLE
 ** 容器启动时执行指令
 *** CMD
 
@@ -753,17 +1786,1390 @@ Dockerfile由一行行命令语句组成,并且支持以 =#= 开头的注释行.
 :PROPERTIES:
 :ID:       kr5d4wq0r6h0
 :END:
-配置容器启动后执行的命令,并且不可被 ~docker run~ 提供的参数覆盖.
+配置容器启动后执行的命令,并且它会被 ~docker run~ 的 =--entrypoint= 参数替代，而不会被 ~docker run~ 提供的直接参数覆盖.
 
 每个Dockerfile中只能有一个 ~ENTRYPOINT~,当指定多个时,只有最后一个起效.
 
 + ENTRYPOINT ["executable","param1","param2"] :: =exec= 方式执行
 + ENTRYPOINT command param1 param2 :: 使用 =/bin/sh -c= 方式执行
 
-*** USER
-指定运行容器时的用户名或UID,后续的 ~RUN~ 也会使用指定用户.
+     
+当使用 *第一种设定方法* 时，ENTRYPOINT 和 CMD 可以放在一起连用
+#+BEGIN_EXAMPLE
+  ENTRYPINT["cmd", "parm1"]
+  CMD["optional-parm1","optional-parm2"]
+#+END_EXAMPLE
 
-当服务不需要管理员权限时,可以通过该命令指定运行用户.并且可以在之前创建所需要的用户.
+而如果 ENTRYPOINT 使用了shell格式，那么CMD指令提供的所有其他参数以及docker run命令运行时指定的额外参数都会被忽略！
 
-+ USER user-name
+在该容器运行时，默认是调用的 =cmd parm1 optional-parm1 optional-parm2=
+但若指定了运行参数，则会变成 =cmd parm1 other-parm1 other-parm2=
+
+若使用第二种方法， *则ENTRYPOINT设定的二进制命令会忽略来自于CMD和RUN命令所添加的参数*
+
+为了确保容器可以正确处理 =docker stop= 命令发来的 SIG 信号，Docker建议用第一种方法来启动二进制文件
+*** 检查镜像状态的HEALTHCHECK指令
+
+HEALTHCHECK 指令是告诉 Docker 应该如何进行判断容器的状态是否正常,其格式为:
+
++ HEALTHCHECK [选项] CMD <命令> :: 设置检查容器健康状况的命令
++ HEALTHCHECK NONE :: 如果基础镜像有健康检查指令，使用这行可以屏蔽掉其健康检查指令
+
+在没有 HEALTHCHECK 指令前，Docker 引擎只可以通过容器内主进程是否退出来判断应用程序是否退出。
+
+但应用程序没有退出，并不代表应用程序能够正常提供服务，于是引入了 =HEALTHCHECK= 指令通过该指令指定一行命令，用这行命令来判断容器主进程的服务状态是否还正常，从而比较真实的反应容器实际状态。
+
+当在一个镜像指定了 HEALTHCHECK 指令后，用其启动容器，初始状态会为 starting，在 HEALTHCHECK 指令检查成功后变为 healthy，如果连续一定次数失败，则会变为 unhealthy。
+
+HEALTHCHECK 支持下列选项：
+
++ --interval=<间隔> :: 两次健康检查的间隔，默认为 30 秒；
++ --timeout=<时长> :: 健康检查命令运行超时时间，如果超过这个时间，本次健康检查就被视为失败，默认 30 秒；
++ --retries=<次数> :: 当连续失败指定次数后，则将容器状态视为 unhealthy，默认 3 次。
+
+和 CMD, ENTRYPOINT 一样，HEALTHCHECK 只可以出现一次，如果写了多个，只有最后一个生效。
+
+在 HEALTHCHECK [选项] CMD 后面的命令，格式和 ENTRYPOINT 一样，分为 shell 格式，和 exec 格式。命令的返回值决定了该次健康检查的成功与否：0：成功；1：失败；2：保留，不要使用这个值。
+
+* Docker Restful命令
+默认情况下Docker监听的是本地unix:///var/run/docker.sock文件。
+
+因此访问Docker Restful命令的一般格式为
+#+BEGIN_SRC shell
+  curl --unix-socket /var/run/docker.sock http://localhost/${url}
+#+END_SRC
+
+或者
+#+BEGIN_SRC shell
+  curl --unix-socket /var/run/docker.sock -d "XXXXXXX" http://localhost/${url}
+#+END_SRC
+
+* Docker Compose
+docker-compose可以将多个容器组成一项服务来进行统一管理
+#+BEGIN_SRC shell :results org
+  docker-compose --help
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+Define and run multi-container applications with Docker.
+
+Usage:
+  docker-compose [-f <arg>...] [options] [COMMAND] [ARGS...]
+  docker-compose -h|--help
+
+Options:
+  -f, --file FILE             Specify an alternate compose file
+                              (default: docker-compose.yml)
+  -p, --project-name NAME     Specify an alternate project name
+                              (default: directory name)
+  --verbose                   Show more output
+  --log-level LEVEL           Set log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+  --no-ansi                   Do not print ANSI control characters
+  -v, --version               Print version and exit
+  -H, --host HOST             Daemon socket to connect to
+
+  --tls                       Use TLS; implied by --tlsverify
+  --tlscacert CA_PATH         Trust certs signed only by this CA
+  --tlscert CLIENT_CERT_PATH  Path to TLS certificate file
+  --tlskey TLS_KEY_PATH       Path to TLS key file
+  --tlsverify                 Use TLS and verify the remote
+  --skip-hostname-check       Don't check the daemon's hostname against the
+                              name specified in the client certificate
+  --project-directory PATH    Specify an alternate working directory
+                              (default: the path of the Compose file)
+  --compatibility             If set, Compose will attempt to convert deploy
+                              keys in v3 files to their non-Swarm equivalent
+
+Commands:
+  build              Build or rebuild services
+  bundle             Generate a Docker bundle from the Compose file
+  config             Validate and view the Compose file
+  create             Create services
+  down               Stop and remove containers, networks, images, and volumes
+  events             Receive real time events from containers
+  exec               Execute a command in a running container
+  help               Get help on a command
+  images             List images
+  kill               Kill containers
+  logs               View output from containers
+  pause              Pause services
+  port               Print the public port for a port binding
+  ps                 List containers
+  pull               Pull service images
+  push               Push service images
+  restart            Restart services
+  rm                 Remove stopped containers
+  run                Run a one-off command
+  scale              Set number of containers for a service
+  start              Start services
+  stop               Stop services
+  top                Display the running processes
+  unpause            Unpause services
+  up                 Create and start containers
+  version            Show the Docker-Compose version information
+#+END_SRC
+
+其中，比较常用的两个参数有:
+
++ -f 配置文件 :: 用于指定一个或多个Docker Compose的配置文件，默认解析的是当前目录下的 =docker-compose.yml= 文件
++ -p 项目名称 :: Docker Compose默认把当前目录名作为项目名称，项目名称会作为启动容器的前缀
+
+** Compose环境变量
+在当前目录中可以包含一个名为 =.env= 的文件，在这个文件中设置一些Docker Compose的环境变量:
+
++ COMPOSE_API_VERSION ::
++ COMPOSE_FILE :: 指定默认的配置文件名称，类似 =-f= 选项
++ COMPOSE_HTTP_TIMEOUT ::
++ COMPOSE_PROJECT_NAME :: 指定项目名称，类似 =-p= 选项
++ DOCKER_CERT_PATH ::
++ DOCKER_HOST :: 指定Docker client连接Docker daemon的地址，默认为 =unix:///var/run/docker.sock=
++ DOCKER_TLS_VERIFY ::
+     
+** Docker Compose子命令
+
+*** build :: 构建并启动服务镜像
+在 =docker-compose.yml= 中通常包括了多个容器构建和启动的配置，默认情况下 =docker-compose build= 会构建其中定义的所有镜像。
+
+但若只是想构建其中的某个容器镜像，则可以在 =build= 子命令后加上容器名称
+#+BEGIN_SRC shell
+  docker-compose build ui
+#+END_SRC
+
+除此之外，build子命令还可以指定 =--force-rm= 来让Docker在构建结束后删除中间容器，
+还可以指定 =--no-cache= 来在构建过程中自动删除构建缓存。
+
+此外， =docker-compose build= 默认在在本地已经有镜像的情况下会直接使用本地已经有的镜像，，
+但是通过 =--pull= 选项可以让docker强制拉取最新的镜像。
+
+另外，若构建镜像的Dockerfile中包含有 =ARG=, 则可以通过 ~--build-arg key1=value2~ 来传递参数
+*** bundle :: 生成DAB包
+通过 docker-compose.yml 文件能够生成一个分布式应用程序包(DAB),这个包可以通过 =docker delpoy= 来进行部署
+
+*** config :: 检查配置语法
+config命令用来检查 =docker-compose.yml= 文件是否有语法问题，如果有则会返回错误原因
+#+BEGIN_SRC shell :results org
+  docker-compose config --help
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+Validate and view the Compose file.
+
+Usage: config [options]
+
+Options:
+    --resolve-image-digests  Pin image tags to digests.
+    -q, --quiet              Only validate the configuration, don't print
+                             anything.
+    --services               Print the service names, one per line.
+    --volumes                Print the volume names, one per line.
+#+END_SRC
+
+*** create :: 创建服务容器
+=docker-compose create= 跟 =docker create= 类似，会创建服务所需要的所有容器，但不会运行容器
+#+BEGIN_SRC shell :results org
+  docker-compose create --help
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+Creates containers for a service.
+This command is deprecated. Use the `up` command with `--no-start` instead.
+
+Usage: create [options] [SERVICE...]
+
+Options:
+    --force-recreate       Recreate containers even if their configuration and
+                           image haven't changed. Incompatible with --no-recreate.
+    --no-recreate          If containers already exist, don't recreate them.
+                           Incompatible with --force-recreate.
+    --no-build             Don't build an image, even if it's missing.
+    --build                Build images before creating containers.
+#+END_SRC
+
++ --force-recreate :: 即使容器配置和镜像没有变动，也重新创建容器
++ --no-recreate :: 如果容器存在则不再重新创建
++ --no-build :: 即使镜像不存在，也不去构建该镜像
++ --build :: 在创建容器之前先构建镜像
+
+*** down :: 清理项目
+与 =up= 命令相对，会删除服务定义所需的容器以及网络，
+通过 =-v= 参数还可以删除相关的数据卷，
+通过 =--rmi= 可以删除相关的镜像
+通过 =--remove-orphans= 还可以删除没有在配置文件中定义的容器
+
+#+BEGIN_SRC shell :results org
+  docker-compose down --help
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+Stops containers and removes containers, networks, volumes, and images
+created by `up`.
+
+By default, the only things removed are:
+
+- Containers for services defined in the Compose file
+- Networks defined in the `networks` section of the Compose file
+- The default network, if one is used
+
+Networks and volumes defined as `external` are never removed.
+
+Usage: down [options]
+
+Options:
+    --rmi type              Remove images. Type must be one of:
+                              'all': Remove all images used by any service.
+                              'local': Remove only images that don't have a
+                              custom tag set by the `image` field.
+    -v, --volumes           Remove named volumes declared in the `volumes`
+                            section of the Compose file and anonymous volumes
+                            attached to containers.
+    --remove-orphans        Remove containers for services not defined in the
+                            Compose file
+    -t, --timeout TIMEOUT   Specify a shutdown timeout in seconds.
+                            (default: 10)
+#+END_SRC
+
+
+*** events :: 查看事件
+=docker-compose events= 其实就是对 =docker events= 命令的整合，它可以看到配置文件中服务定义各容器所发生的相关事件
+
+#+BEGIN_SRC shell :results org
+  docker-compose events --help
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+Receive real time events from containers.
+
+Usage: events [options] [SERVICE...]
+
+Options:
+    --json      Output events as a stream of json objects
+#+END_SRC
+
+
+*** exec :: 进入服务中某个容器执行命令
+=docker-compose exec= 与 =docker exec= 类似，都是进入容器执行命令。
+不同点在于 =docker-compose= 后面接的是服务名称而不是容器名称，同时由于可能一个服务由多个容器组成，因此可能需要使用 ~--index=index~ 来指定在哪个容器上运行命令
+
+#+BEGIN_SRC shell :results org
+  docker-compose exec --help
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+Execute a command in a running container
+
+Usage: exec [options] [-e KEY=VAL...] SERVICE COMMAND [ARGS...]
+
+Options:
+    -d, --detach      Detached mode: Run command in the background.
+    --privileged      Give extended privileges to the process.
+    -u, --user USER   Run the command as this user.
+    -T                Disable pseudo-tty allocation. By default `docker-compose exec`
+                      allocates a TTY.
+    --index=index     index of the container if there are multiple
+                      instances of a service [default: 1]
+    -e, --env KEY=VAL Set environment variables (can be used multiple times,
+                      not supported in API < 1.25)
+    -w, --workdir DIR Path to workdir directory for this command.
+#+END_SRC
+
++ -d :: 后台执行命令
++ --privileged :: 开启特权模式，获得宿主机的root权限
++ --user $USER :: 切换进入容器时的用户身份
++ -T :: 禁止伪终端分配，默认会给命令分配伪终端
++ --index=$INDEX :: 若服务中包含多个实例，则通过它指定在那个容器实例中运行，默认为1
++ --env KEY=VAL :: 设置环境变量
++ --workdir $DIR :: 设置该命令所在的工作目录
+
+*** kill :: 杀死服务下的容器
+使用kill命令，默认会杀死项目下所有服务的相关容器，但也可以通过指定服务器名称杀死自定服务下的容器
+
+#+BEGIN_SRC shell :results org
+  docker-compose kill --help
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+Force stop service containers.
+
+Usage: kill [options] [SERVICE...]
+
+Options:
+    -s SIGNAL         SIGNAL to send to the container.
+                      Default signal is SIGKILL.
+#+END_SRC
+
+可以通过 =-s $SIGNAL= 来指定杀死容器时发送的信号量，默认为 =SIGKILL=
+
+
+*** logs :: 查看服务日志
+logs命令默认查看项目下所有服务的相关容器的日志,也可以通过指定服务名称来只查看指定服务的日志
+
+#+BEGIN_SRC shell :results org
+  docker-compose logs --help
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+View output from containers.
+
+Usage: logs [options] [SERVICE...]
+
+Options:
+    --no-color          Produce monochrome output.
+    -f, --follow        Follow log output.
+    -t, --timestamps    Show timestamps.
+    --tail="all"        Number of lines to show from the end of the logs
+                        for each container.
+#+END_SRC
+
++ -f :: 不断输出日志
++ -t :: 在每行日志前加上一个时间戳
++ --tail N :: 只显示最后的N行
+              
+*** pause :: 暂停服务容器
+pause命令默认暂停所有服务的所有相关容器，但也可以通过指定服务名称停止指定服务
+#+BEGIN_SRC shell :results org
+  docker-compose pause --help
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+Pause services.
+
+Usage: pause [SERVICE...]
+#+END_SRC
+
+*** port :: 查看服务容器端口
+=docker-compose port= 与 =docker port= 类似，但是需要同时指定服务名称以及服务暴露的端口，才能查看到端口在宿主机中的映射
+
+#+BEGIN_SRC shell :results org
+  docker-compose port --help
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+Print the public port for a port binding.
+
+Usage: port [options] SERVICE PRIVATE_PORT
+
+Options:
+    --protocol=proto  tcp or udp [default: tcp]
+    --index=index     index of the container if there are multiple
+                      instances of a service [default: 1]
+#+END_SRC
+
++ --protocol=PROTO :: 指定TCP还是UDP协议
++ --index=INDEX :: 指定容器索引值，可以用来显示指定容器端口的映射情况
+
+*** ps :: 查看正在运行的服务容器
+
+=docker-compose ps= 与 =docker ps= 类似，用于查看正在运行的容器。默认它显示所有服务的正在运行容器，但也可以通过指定服务的方式来只显示某个服务的相关容器
+#+BEGIN_SRC shell :results org
+  docker-compose ps --help
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+List containers.
+
+Usage: ps [options] [SERVICE...]
+
+Options:
+    -q, --quiet          Only display IDs
+    --services           Display services
+    --filter KEY=VAL     Filter services by a property
+#+END_SRC
+
+*** pull :: 拉取项目镜像
+使用 =docker-compose pull= 可以拉去多个服务的多个相关镜像
+
+#+BEGIN_SRC shell :results org
+  docker-compose pull --help
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+Pulls images for services defined in a Compose file, but does not start the containers.
+
+Usage: pull [options] [SERVICE...]
+
+Options:
+    --ignore-pull-failures  Pull what it can and ignores images with pull failures.
+    --parallel              Deprecated, pull multiple images in parallel (enabled by default).
+    --no-parallel           Disable parallel pulling.
+    -q, --quiet             Pull without printing progress information
+    --include-deps          Also pull services declared as dependencies
+#+END_SRC
+
+=docker-compose pull= 拉取镜像时，若某个镜像拉取失败会自动停止后面的镜像拉取操作，
+而参数 =ignore-pull-failures= 可以无视这个镜像拉取失败的提示，继续拉取后面的镜像
+
+*** push :: 推送项目镜像
+在项目中，某些服务的镜像可能是基于Dockerfile构建的，则可以通过push命令推送项目的服务镜像到仓库
+
+#+BEGIN_SRC shell :results org
+  docker-compose push --help
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+Pushes images for services.
+
+Usage: push [options] [SERVICE...]
+
+Options:
+    --ignore-push-failures  Push what it can and ignores images with push failures.
+#+END_SRC
+
+类似 =pull= 子命令， =docker-compose push= 推送镜像时，若某个镜像失败会自动停止后面的镜像推送操作，
+而参数 =ignore-push-failures= 可以无视这个镜像推送失败的提示，继续推送后面的镜像
+
+*** restart :: 重启服务中的容器
+=docker-compose restart= 默认重启项目中所有服务的容器，但也可以指定服务只重启指定服务的容器
+
+#+BEGIN_SRC shell :results org
+  docker-compose restart --help
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+Restart running containers.
+
+Usage: restart [options] [SERVICE...]
+
+Options:
+  -t, --timeout TIMEOUT      Specify a shutdown timeout in seconds.
+                             (default: 10)
+#+END_SRC
+
+=-t= 参数在指定秒数内若容器无法停止，则会发送 =SIGKILL= 信号来强制停止容器
+
+*** rm :: 删除服务中的容器
+默认删除整个项目的容器，但也可以通过指定服务名称只删除指定容器
+#+BEGIN_SRC shell :results org
+  docker-compose rm --help
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+Removes stopped service containers.
+
+By default, anonymous volumes attached to containers will not be removed. You
+can override this with `-v`. To list all volumes, use `docker volume ls`.
+
+Any data which is not in a volume will be lost.
+
+Usage: rm [options] [SERVICE...]
+
+Options:
+    -f, --force   Don't ask to confirm removal
+    -s, --stop    Stop the containers, if required, before removing
+    -v            Remove any anonymous volumes attached to containers
+    -a, --all     Deprecated - no effect.
+#+END_SRC
+
++ -f :: 不确认是否真的删除容器,需要说明的是， *compose不允许强制删除正在运行的容器，必须先停止或杀掉容器后才能删除，除非指定了-s参数*
+
++ -s :: 会先停止服务中的容器，然后再删除这些容器
+        
++ -v :: 删除容器的同时也会删掉数据卷
+
+*** run :: 创建临时容器并运行命令
+#+BEGIN_SRC shell :results org
+  docker-compose run --help
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+Run a one-off command on a service.
+
+For example:
+
+    $ docker-compose run web python manage.py shell
+
+By default, linked services will be started, unless they are already
+running. If you do not want to start linked services, use
+`docker-compose run --no-deps SERVICE COMMAND [ARGS...]`.
+
+Usage:
+    run [options] [-v VOLUME...] [-p PORT...] [-e KEY=VAL...] [-l KEY=VALUE...]
+        SERVICE [COMMAND] [ARGS...]
+
+Options:
+    -d, --detach          Detached mode: Run container in the background, print
+                          new container name.
+    --name NAME           Assign a name to the container
+    --entrypoint CMD      Override the entrypoint of the image.
+    -e KEY=VAL            Set an environment variable (can be used multiple times)
+    -l, --label KEY=VAL   Add or override a label (can be used multiple times)
+    -u, --user=""         Run as specified username or uid
+    --no-deps             Don't start linked services.
+    --rm                  Remove container after run. Ignored in detached mode.
+    -p, --publish=[]      Publish a container's port(s) to the host
+    --service-ports       Run command with the service's ports enabled and mapped
+                          to the host.
+    --use-aliases         Use the service's network aliases in the network(s) the
+                          container connects to.
+    -v, --volume=[]       Bind mount a volume (default [])
+    -T                    Disable pseudo-tty allocation. By default `docker-compose run`
+                          allocates a TTY.
+    -w, --workdir=""      Working directory inside the container
+#+END_SRC
+
+使用 =docker-compose $SERVER $COMMAND= 会使用配置文件中定义的 =$SERVER= 配置来启动一个新容器并执行 =$COMMAND=.
+也就是说，启动的容器具有相同的数据卷、链接映射和配置，但需要注意以下几点:
+
++ run 会使用 =$COMMAND= 覆盖配置文件中的运行指令
+
++ run 命令默认并不执行配置文件中的端口映射配置，除非带了 =--service-ports= 参数，但你可以通过 =-p= 手工指定端口映射
+
++ 新创建的容器并不属于项目服务的一部分
+
+*** scale :: 设置提供服务的容器数量
+有时候为了保证服务的高可用和负载均衡，我们会为一个服务运行多个容器,这时可以用 =docker-compose scale $SERVER=$NUM= 来设置启动的容器个数
+
+#+BEGIN_SRC shell :results org
+  docker-compose scale --help
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+Set number of containers to run for a service.
+
+Numbers are specified in the form `service=num` as arguments.
+For example:
+
+    $ docker-compose scale web=2 worker=3
+
+This command is deprecated. Use the up command with the `--scale` flag
+instead.
+
+Usage: scale [options] [SERVICE=NUM...]
+
+Options:
+  -t, --timeout TIMEOUT      Specify a shutdown timeout in seconds.
+                             (default: 10)
+#+END_SRC
+
+*** start :: 启动提供服务的容器
+start命令启动服务，可以启动非运行的容器，默认会启动所有服务的容器，但也可以指定服务名称以只启动该服务的容器
+#+BEGIN_SRC shell :results org
+  docker-compose start --help
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+Start existing containers.
+
+Usage: start [SERVICE...]
+#+END_SRC
+
+当然该命令只会启动已经存在的容器，因此第一次运行前记得build
+
+*** stop :: 停止提供服务的容器
+stop命令默认停止全部服务的容器，也可以指定服务名称来停止特定服务的容器
+#+BEGIN_SRC shell :results org
+  docker-compose stop --help
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+Stop running containers without removing them.
+
+They can be started again with `docker-compose start`.
+
+Usage: stop [options] [SERVICE...]
+
+Options:
+  -t, --timeout TIMEOUT      Specify a shutdown timeout in seconds.
+                             (default: 10)
+#+END_SRC
+
+-t 参数指定多少秒之内响应超时则直接杀死容器
+
+*** pause :: 暂停服务容器
+pause暂停服务，效果类似 =docker pause=, 其默认也是暂停项目所有服务，但可以指定服务名称从而只暂停某个服务的相关容器
+#+BEGIN_SRC shell :results org
+  docker-compose pause --help
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+Pause services.
+
+Usage: pause [SERVICE...]
+#+END_SRC
+
+被暂停了的容器无法被操作，即使kill也不能杀死，必须先使用 =unpause= 恢复
+
+*** unpause :: 恢复服务容器
+unpause恢复被暂停的服务容器
+#+BEGIN_SRC shell :results org
+  docker-compose unpause --help
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+Unpause services.
+
+Usage: unpause [SERVICE...]
+#+END_SRC
+
+unpause同样默认针对项目全部服务，但是也能指定服务。
+
+无论是pause还是unpause命令，都需要容器出于运行状态才能操作
+
+*** up :: 启动项目
+
+=docker-compose up= 命令是最常用的命令，它会包含了 =构建镜像、创建/重新创建容器、启动容器和连接服务容器= 一系列的步骤
+#+BEGIN_SRC shell :results org
+  docker-compose up --help
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_SRC org
+Builds, (re)creates, starts, and attaches to containers for a service.
+
+Unless they are already running, this command also starts any linked services.
+
+The `docker-compose up` command aggregates the output of each container. When
+the command exits, all containers are stopped. Running `docker-compose up -d`
+starts the containers in the background and leaves them running.
+
+If there are existing containers for a service, and the service's configuration
+or image was changed after the container's creation, `docker-compose up` picks
+up the changes by stopping and recreating the containers (preserving mounted
+volumes). To prevent Compose from picking up changes, use the `--no-recreate`
+flag.
+
+If you want to force Compose to stop and recreate all containers, use the
+`--force-recreate` flag.
+
+Usage: up [options] [--scale SERVICE=NUM...] [SERVICE...]
+
+Options:
+    -d, --detach               Detached mode: Run containers in the background,
+                               print new container names. Incompatible with
+                               --abort-on-container-exit.
+    --no-color                 Produce monochrome output.
+    --quiet-pull               Pull without printing progress information
+    --no-deps                  Don't start linked services.
+    --force-recreate           Recreate containers even if their configuration
+                               and image haven't changed.
+    --always-recreate-deps     Recreate dependent containers.
+                               Incompatible with --no-recreate.
+    --no-recreate              If containers already exist, don't recreate
+                               them. Incompatible with --force-recreate and -V.
+    --no-build                 Don't build an image, even if it's missing.
+    --no-start                 Don't start the services after creating them.
+    --build                    Build images before starting containers.
+    --abort-on-container-exit  Stops all containers if any container was
+                               stopped. Incompatible with -d.
+    -t, --timeout TIMEOUT      Use this timeout in seconds for container
+                               shutdown when attached or when containers are
+                               already running. (default: 10)
+    -V, --renew-anon-volumes   Recreate anonymous volumes instead of retrieving
+                               data from the previous containers.
+    --remove-orphans           Remove containers for services not defined
+                               in the Compose file.
+    --exit-code-from SERVICE   Return the exit code of the selected service
+                               container. Implies --abort-on-container-exit.
+    --scale SERVICE=NUM        Scale SERVICE to NUM instances. Overrides the
+                               `scale` setting in the Compose file if present.
+#+END_SRC
+
+直接使用 =docker-compose up= 命令会聚合全部的容器信息，每个容器输出内容用不同颜色区分，这时按下 =Ctrl-c= 命令会停止所有容器。
+
+如果想让项目在后台运行，则需要添加参数 =-d=
+
+** Compose配置文件
+Docker Compose使用YML配置文件来定义多个容器的关系. Compose配置文件定义了包括服务（容器）、网络、数据卷在内的一系列项目组建。
+Docker Compose实际上就解析这个YML配置文件,然后根据解析结果生成原生的Docker命令去执行
+
+一个配置文件的例子如下所示，
+#+BEGIN_SRC yaml
+  version : '2'
+  services:
+    web:
+      build: ../webapp
+      ports:
+        - 8080
+        - 80
+      networks:
+        - front-tier
+        - back-tier
+
+    redis:
+      image: redis
+      links:
+        - web
+      networks:
+        - back-tier
+
+    lib:
+      image: haproxy
+      build:
+        context: ../haproxy
+        dockerfile: ../haproxy/docker.file
+        args:
+          buildno: 1
+          password: secret
+      ports:
+        - 80:80
+      links:
+        - web
+      networks:
+        - front-tier
+        - back-tier
+      volumes:
+        - /var/run/docker.sock:/var/run/docker.sock
+
+  networks:
+    front-tier:
+      driver: bridge
+    back-tier:
+      driver: bridge
+#+END_SRC
+
+从中可以看出，一份标准的配置文件应该包括version,services,networks三部分，其中最关键的是services和networks这两个部分。
+
+*** services部分的配置
+把services看成一个map来看的话，其中的key就是每个服务的名称，比如上面例子中的 =db,redis,lib=
+而value则是另一个map，里面存储了关于服务的各项配置信息。
+
+**** image :: 指定服务使用的镜像
+image指定了提供服务的镜像名称或镜像ID，如果镜像本地不存在则Compose会尝试拉取这个镜像
+
+**** build :: 指定构建镜像的上下文
+服务也可以根据一份Dockerfile来构建镜像，给build构建标签指定Dockerfile所在的目录，Compose就能利用它来自动构建镜像，然后使用镜像启动容器了。
+#+BEGIN_SRC yaml
+  build: /path/to/dockerfile/directory
+  # 也可以是相对路径
+  build: ../directory
+#+END_SRC
+
+除此之外，build标签还支持子标签
+#+BEGIN_SRC yaml
+    build:
+      context: ../haproxy
+      dockerfile: ../haproxy/docker.file
+      args:
+        buildno: 1
+        password: secret
+#+END_SRC
+
+如果同时指定了image和build两个标签，那么Comose会根据build标签构建镜像，并且把构建出来的镜像根据image标签进行命名
+#+BEGIN_SRC yaml
+  build: ../docker
+  image: webapp:tag
+#+END_SRC
+
+**** command :: 指定容器启动时的CMD
+类似于Dockerfile中的CMD指令，它也有两种写法
+#+BEGIN_SRC yaml
+  command: make -f make.file
+  command: [make, -f, make.file]
+#+END_SRC
+
+**** container_name :: 指定运行服务的容器名称
+一般Compose会自动生成提供服务的容器名称: =$项目名称_$服务名称_$序号=
+但你也可以通过 =container_name= 标签直接指定容器名称
+#+BEGIN_SRC yaml
+  container_name: app
+#+END_SRC
+
+**** depends_on :: 指定服务依赖关系
+该标签指定了容器的启动先后顺序
+
+#+BEGIN_SRC yaml
+  version: "1"
+  services:
+    web:
+      build: .
+      depends_on:
+        - db
+        - redis
+    redis:
+      image: redis
+    db:
+      image: mysql
+#+END_SRC
+
+则执行 =docker-compose up web= 时，会先启动 =redis= 和 =db= 服务，然后再启动 =web= 服务。
+
+**** dns / dns_search :: 指定服务的DNS配置
+与 --dns 和 --dns_search 参数一样，可以为单个字符串也可以为一个数组:
+#+BEGIN_SRC yaml
+  dns: 8.8.8.8
+  dns:
+    - 8.8.8.8
+    - 9.9.9.9
+  dns_search: dev.com
+  dns_search:
+    - dev.com
+    - prod.com
+#+END_SRC
+
+**** tmpfs :: 挂载临时目录
+挂载临时目录到容器内部，与run的参数效果一样:
+#+BEGIN_SRC yaml
+  tmpfs: /run
+  tmpfs:
+    - /run
+    - /tmp
+#+END_SRC
+
+**** entrypont :: 指定容器运行时的entrypoint
+entrypoint也支持两种写法，一种字符串，一种数组
+#+BEGIN_SRC yaml
+  entrypoint: php -d memory_limit=-1
+  entrypoint: [php, -d, memory_limit=-1]
+  entrypoint:
+    - php
+    - -d
+    - memory_limit=-1
+#+END_SRC
+
+**** env_file :: 指定compose的环境变量文件
+前面提到Compose默认使用 =.env= 文件来保存一些Compose应用相关的环境变量信息。
+
+通过 =env_file= 指令我们可以指定Compose从另一个或多个文件中读取环境变量的值
+#+BEGIN_SRC yaml
+  env_file: .env
+  env_file:
+    - ./common.env
+    - ./japps/web.env
+    - /opt/secrets.env
+#+END_SRC
+
+**** environment :: 设置构建和运行容器时的环境变量
+#+BEGIN_SRC yaml
+  environment:
+    KEY1: VALUE1
+    KEY2: VALUE2
+  environment:
+    - KEY3=VALUE3
+    - KEY4=VALUE4
+#+END_SRC
+
+**** expose :: 指定暴露端口
+expose标签与Dockerfile中的EXPOSE指令一样，用于指定暴露的端口，但只是作为一种参考，实际上的端口映射由 =port= 标签决定
+#+BEGIN_SRC yaml
+  expose:
+    - "3000"
+    - "8000"
+#+END_SRC
+
+**** external_links :: 连接外部容器
+这个标签使得Compose能够连接那些不在docker-compose.yml中定义的容器，前提是外部容器与项目中的容器在同一个网络中
+#+BEGIN_SRC yaml
+  external_links:
+    - redis_1
+    - project_db_1:mysql
+    - project_db_1:postgresql
+#+END_SRC
+
+**** extra_hosts :: 扩展连接服务器的hosts列表
+extra_host会向容器中的 =/etc/hosts= 文件中添加额外的记录，与 =--add-host= 类似
+#+BEGIN_SRC yaml
+  extra_hosts:
+    - "host1:192.168.1.2"
+    - "host2:192.168.1.3"
+#+END_SRC
+
+**** labels :: 添加元数据
+与Dockerfile中的LABEL意思一样:
+
+#+BEGIN_SRC yaml
+  labels:
+    description: "Acounting webapp"
+    department: "Finance"
+  labels:
+    - "description=Accounting webapp"
+    - "department=Finance"
+#+END_SRC
+
+**** links :: 设置容器互联
+与 =--link= 效果一样，连接其他服务中的容器
+#+BEGIN_SRC yaml
+  links:
+    - mysql:database
+    - redis
+#+END_SRC
+
+**** logging :: 配置服务日志
+#+BEGIN_SRC yaml
+  logging:
+    driver: syslog
+    options:
+      syslog-address: "tcp://192.168.1.9:123"
+#+END_SRC
+
+**** pid :: 指定进程空间
+#+BEGIN_SRC yaml
+  # 主机PID模式，与主机共享进程命名空间
+  pid: "host"
+  # 自定义进程命名空间
+  pid: "NS1"
+#+END_SRC
+
+**** ports :: 设置容器端口映射
+使用 =HOST_PORT:CONTAINER_PORT= 格式,若只指定容器端口，则随机映射主机端口
+#+BEGIN_SRC yaml
+  ports:
+    - "3000"                      # 宿主3000端口会映射到主机的随机端口
+    - "8000:8000"
+    - "49100:22"
+    - "127.0.0.1:8001:8001"
+#+END_SRC
+
+**** security_opt :: 设置容器安全选项
+#+BEGIN_SRC yaml
+  security_opt:
+    - label:user:USER
+    - label:role:ROLE
+#+END_SRC
+
+**** stop_signal :: 设置容器的停止信号
+设置另一个信号来停止容器，默认情况下使用 =SIGTERM= 停止容器。我们可以用 =stop_signal= 标签设置另一个信号
+#+BEGIN_SRC yaml
+  stop_signal: SIGUSR1
+#+END_SRC
+
+**** volumes :: 设置容器数据卷
+类似 =-v= 参数的语法
+#+BEGIN_SRC yaml
+  volumes:
+    - /var/lib/mysql
+    - ./cache:/tmp/.cache
+    - /etc/audit/:/etc/audit:ro
+#+END_SRC
+
+**** volumes_from :: 挂载数据卷容器
+#+BEGIN_SRC yaml
+  volumes_from:
+    - service_name
+    - service_name:ro
+    - container:container_name
+    - container:container_name:rw
+#+END_SRC
+
+**** cap_add,cap_drop :: 修改内核功能
+添加或删除容器的内核功能
+#+BEGIN_SRC yaml
+  cap_add:
+    - ALL
+  cap_drop:
+    - NET_ADMIN
+    - SYS_ADMIN
+#+END_SRC
+
+**** cgroup_parent :: 指定父级CGroup
+#+BEGIN_SRC yaml
+  cgroup_parent: m-executor-abcd
+#+END_SRC
+
+**** devices :: 设备映射列表
+与 =--devices= 参数类似
+#+BEGIN_SRC yaml
+  devices:
+    - "/dev/video0:/dev/video0"
+    - "/dev/video1:/dev/video1"
+#+END_SRC
+
+**** extends :: 配置服务扩展
+相当于是将其他配置文件中的服务设定引用过来
+#+BEGIN_SRC yaml
+  extends:
+    file: common.yml
+    service: webapp
+#+END_SRC
+
+**** network_mode :: 设置服务的网络模式
+与 =--net= 参数类似，只是多了一个 =service:[service name]= 的格式
+#+BEGIN_SRC yaml
+  network_mode: "bridge"
+  network_mode: "host"
+  network_mode: "none"
+  network_mode: "service:[service name]"
+  network_mode: "container:[container name/id]"
+#+END_SRC
+
+**** networks: 设置服务容器要加入哪个网络
+#+BEGIN_SRC yaml
+  services:
+    app:
+      networks:
+        - some-network
+        - other-network
+#+END_SRC
+
+networks标签还有一个特别的子标签aliases,用来设置服务在该网络中的别名，相同的服务在不同网络中可以有不同的别名
+#+BEGIN_SRC yaml
+  services:
+    app:
+      networks:
+        some-network:
+          aliases:
+            - alias1
+            - alias2
+        other-network:
+          aliases:
+            - alias3
+#+END_SRC
+
+**** 其他标签
+还有其他很多单值标签，类似于 =docker run= 中对应参数的效果
+
++ cpu_shares
++ cpu_quota
++ cpuset
++ domainname
++ hostname
++ ipc
++ mac_address
++ mem_limit
++ memswap_limit
++ privileged
++ read_only
++ restart
++ shm_size
++ stdin_oen
++ tty
++ user
++ working_dir
+  
+*** 网路配置
+Compose可以自定义网络，这允许用户创建复杂的拓扑结构，指定网络驱动程序以及选项。
+
+#+BEGIN_SRC yaml
+  networks:
+    net1:
+      driver: custom-driver
+      driver_opts:
+        foo: "1"
+        bar: "2"
+#+END_SRC
+
+* Docker Machine
+Docker Machine是Docker官方提供的一个帮助我们在远程机器上安装Docker和在本地安装带Docker的虚拟机的工具。
+我们还可以通过docker=machine命令来对远程主机的Docker进行管理。
+
+Docker Machine自带了很多驱动，这些驱动将不同的虚拟机引擎与云服务商与Docker Machine整合在一起。
+Docker Machine自带的驱动有:
+#+BEGIN_EXAMPLE
+  amazonec2        digitalocean     generic          hyperv           rackspace        virtualbox       vmwarevcloudair
+  azure            exoscale         google           openstack        softlayer        vmwarefusion     vmwarevsphere
+#+END_EXAMPLE
+
+** 在本地创建带Docker的虚拟机
+通过 =docker-machine create= 命令可以创建主机并安装虚拟机，比如下面命令会创建三个使用VirtualBox驱动的主机并且在每台主机上安装好Docker
+#+BEGIN_SRC shell :results org
+  docker-machine create --driver virtualbox host1
+  docker-machine create --driver virtualbox host2
+  docker-machine create --driver virtualbox host3
+#+END_SRC
+
+#+BEGIN_SRC org
+Running pre-create checks...
+Creating machine...
+(host1) Copying /home/lujun9972/.docker/machine/cache/boot2docker.iso to /home/lujun9972/.docker/machine/machines/host1/boot2docker.iso...
+(host1) Creating VirtualBox VM...
+(host1) Creating SSH key...
+(host1) Starting the VM...
+(host1) Check network to re-create if needed...
+(host1) Waiting for an IP...
+Waiting for machine to be running, this may take a few minutes...
+Detecting operating system of created instance...
+Waiting for SSH to be available...
+Detecting the provisioner...
+Provisioning with boot2docker...
+Copying certs to the local machine directory...
+Copying certs to the remote machine...
+Setting Docker configuration on the remote daemon...
+Checking connection to Docker...
+Docker is up and running!
+To see how to connect your Docker Client to the Docker Engine running on this virtual machine, run: docker-machine env host1
+Running pre-create checks...
+Creating machine...
+(host2) Copying /home/lujun9972/.docker/machine/cache/boot2docker.iso to /home/lujun9972/.docker/machine/machines/host2/boot2docker.iso...
+(host2) Creating VirtualBox VM...
+(host2) Creating SSH key...
+(host2) Starting the VM...
+(host2) Check network to re-create if needed...
+(host2) Waiting for an IP...
+Waiting for machine to be running, this may take a few minutes...
+Detecting operating system of created instance...
+Waiting for SSH to be available...
+Detecting the provisioner...
+Provisioning with boot2docker...
+Copying certs to the local machine directory...
+Copying certs to the remote machine...
+Setting Docker configuration on the remote daemon...
+Checking connection to Docker...
+Docker is up and running!
+To see how to connect your Docker Client to the Docker Engine running on this virtual machine, run: docker-machine env host2
+Running pre-create checks...
+Creating machine...
+(host3) Copying /home/lujun9972/.docker/machine/cache/boot2docker.iso to /home/lujun9972/.docker/machine/machines/host3/boot2docker.iso...
+(host3) Creating VirtualBox VM...
+(host3) Creating SSH key...
+(host3) Starting the VM...
+(host3) Check network to re-create if needed...
+(host3) Waiting for an IP...
+Waiting for machine to be running, this may take a few minutes...
+Detecting operating system of created instance...
+Waiting for SSH to be available...
+Detecting the provisioner...
+Provisioning with boot2docker...
+Copying certs to the local machine directory...
+Copying certs to the remote machine...
+Setting Docker configuration on the remote daemon...
+Checking connection to Docker...
+Docker is up and running!
+To see how to connect your Docker Client to the Docker Engine running on this virtual machine, run: docker-machine env host3
+#+END_SRC
+
+同时，你会发现virtualbox创建了名为host1,host2,host3的三台主机
+#+BEGIN_SRC shell :results org
+  vboxmanage list vms
+#+END_SRC 
+
+#+BEGIN_SRC org
+"winxp_default_1529148278389_22373" {5d100a8e-a670-4f84-8ea4-eb22f3dab94d}
+"win7" {dddcdefb-5002-4bcd-bef2-ee37f0ba6197}
+"rhel7.5" {bbf01330-070b-4663-b8e3-52734297c112}
+"redis-host" {f5576790-7d12-4ee8-884f-7352c04f4e04}
+"rhel_default_1532386536492_17873" {449040f4-21ef-436d-8648-a4026a547875}
+"centos_default_1532472936791_11249" {86ffd1ee-681a-4062-a233-e29ac966fc81}
+"freebsd" {2924b43b-da8b-4f59-ac32-ee4420923055}
+"RHEL7" {33e98062-f82e-49df-9a8a-91b0eb31e80d}
+"arch_default_1532990644081_68335" {2d5206ba-c07a-4691-8c3b-63e941113f15}
+"ctf-tools_default_1533510374954_98487" {edd5c5d6-95e5-47af-a462-1d66aab8e640}
+"host1" {ee738687-3981-4582-b2d3-3540a1cbff1c}
+"host2" {d2907cef-5018-4476-a6e8-5e7c1c321cfe}
+"host3" {222d485e-26c2-46e8-bc6e-cfc490d4c34a}
+#+END_SRC
+
+** 在远程主机上安装Docker
+
+若远程主机是在Docker Machine支持的云服务商的，那么可以直接通过对应的驱动来帮助安装Docker，方法跟上面很类似。
+
+然若远程主机并不是在云服务商上，或者是Docker Machine所不支持的云服务商，那么可以通过 =generic= 驱动来进行安装。
+
+在使用 =generic= 进行远程安装前，我们需要一些准备工作:
+
+1. 在目标主机创建一个无需输入密码即可sudo操作的用户
+   #+BEGIN_SRC shell
+     sudo adduser ${user}
+     sudo usermod -a -G sudo wheel ${user}
+     echo "${user} ALL=(ALL:ALL) NOPASSWD: ALL" >>/etc/sudoers
+   #+END_SRC
+
+2. 在目标主机上添加密钥认证，使得登陆远程主机不同输入密码
+   #+BEGIN_SRC shell
+     ssh-copy-id ${user}@${remote_host}
+   #+END_SRC
+
+   
+准备工作完成后，我们可以在本地主机上运行下面命令
+#+BEGIN_SRC shell
+  docker-machine create -d generic \
+      --generic-ip-address=xxx.xxx.xxx.xxx \
+      --generic-ssh-user=${user} \
+      --generic-ssh-key ~/.ssh/id_rsa \
+      ${name}
+#+END_SRC
+
+其中 =${name}= 就是 Docker-Machine 用来管理目标主机上Docker的一个指代名称。
+
+** 管理Docker Machine
+
+*** 查看被管主机信息
+Docker Machine可以用来列出、检查和升级被管主机，我们可以通过 =ls= 子命令来获得被管理的机器列表
+#+BEGIN_SRC shell :results org
+  docker-machine ls
+#+END_SRC
+
+#+BEGIN_SRC org
+NAME         ACTIVE   DRIVER       STATE     URL                         SWARM   DOCKER        ERRORS
+host1        -        virtualbox   Running   tcp://192.168.99.100:2376           v18.06.0-ce   
+host2        -        virtualbox   Running   tcp://192.168.99.101:2376           v18.06.0-ce   
+host3        -        virtualbox   Running   tcp://192.168.99.102:2376           v18.06.0-ce   
+redis-host   -        virtualbox   Stopped                                       Unknown       
+#+END_SRC
+
+这个命令列出了每台被管主机的名称、创建时的驱动、状态、以及Docker Daemon访问的URL。
+ACTIVE这一列若带星号，则表示这台机器是活跃的，也就是任何在本地运行的docker命令连接上的都是活跃机器上的Docker Daemon。
+
+类似于 =docker=, 我们也可以使用 =inspect= 子命令来查看某台主机的配置
+#+BEGIN_SRC shell :results org
+  docker-machine inspect --format "{{.Driver.IPAddress}}" host2
+#+END_SRC
+
+#+BEGIN_SRC org
+192.168.99.101
+#+END_SRC
+
+当然，如果只是想看被管主机IP，那么可以直接通过 =ip= 子命令来查看
+#+BEGIN_SRC shell :results org
+  docker-machine ip host2
+#+END_SRC
+
+#+BEGIN_SRC org
+192.168.99.101
+#+END_SRC
+
+
+*** 升级被管主机
+#+BEGIN_SRC shell :results org
+  docker-machine upgrade host1
+#+END_SRC
+
+#+BEGIN_SRC org
+Waiting for SSH to be available...
+Detecting the provisioner...
+Upgrading docker...
+Stopping machine to do the upgrade...
+Upgrading machine "host1"...
+Copying /home/lujun9972/.docker/machine/cache/boot2docker.iso to /home/lujun9972/.docker/machine/machines/host1/boot2docker.iso...
+Starting machine back up...
+(host1) Check network to re-create if needed...
+(host1) Waiting for an IP...
+Restarting docker...
+#+END_SRC
+
+*** 停止被管主机
+使用 =stop= 子命令来停止被管主机
+#+BEGIN_SRC shell :results org
+  docker-machine stop host2
+#+END_SRC
+
+#+BEGIN_SRC org
+Stopping "host2"...
+Machine "host2" was stopped.
+#+END_SRC
+
+如果使用 =stop= 子命令迟迟无法关闭被管主机，那么也可以直接使用 =kill= 命令来强制关机
+
+*** 启动被管主机
+使用 =start= 子命令来启动被停止的主机
+#+BEGIN_SRC shell :results org
+  docker-machine start host2
+#+END_SRC
+
+#+BEGIN_SRC org
+Starting "host2"...
+(host2) Check network to re-create if needed...
+(host2) Waiting for an IP...
+Machine "host2" was started.
+Waiting for SSH to be available...
+Detecting the provisioner...
+Started machines may have new IP addresses. You may need to re-run the `docker-machine env` command.
+#+END_SRC
+
+*** 删除被管主机
+使用 =rm= 子命令来删除被管主机
+#+BEGIN_SRC shell :results org
+  yes|docker-machine rm host3
+#+END_SRC
+
+#+BEGIN_SRC org
+About to remove host3
+WARNING: This action will delete both local reference and remote instance.
+Are you sure? (y/n): Successfully removed host3
+#+END_SRC
+
+再次查看一下virtualbox还剩下哪些主机
+#+BEGIN_SRC shell :results org
+  vboxmanage list vms
+#+END_SRC 
+
+#+BEGIN_SRC org
+"winxp_default_1529148278389_22373" {5d100a8e-a670-4f84-8ea4-eb22f3dab94d}
+"win7" {dddcdefb-5002-4bcd-bef2-ee37f0ba6197}
+"rhel7.5" {bbf01330-070b-4663-b8e3-52734297c112}
+"redis-host" {f5576790-7d12-4ee8-884f-7352c04f4e04}
+"rhel_default_1532386536492_17873" {449040f4-21ef-436d-8648-a4026a547875}
+"centos_default_1532472936791_11249" {86ffd1ee-681a-4062-a233-e29ac966fc81}
+"freebsd" {2924b43b-da8b-4f59-ac32-ee4420923055}
+"RHEL7" {33e98062-f82e-49df-9a8a-91b0eb31e80d}
+"arch_default_1532990644081_68335" {2d5206ba-c07a-4691-8c3b-63e941113f15}
+"ctf-tools_default_1533510374954_98487" {edd5c5d6-95e5-47af-a462-1d66aab8e640}
+"host1" {ee738687-3981-4582-b2d3-3540a1cbff1c}
+"host2" {d2907cef-5018-4476-a6e8-5e7c1c321cfe}
+#+END_SRC
+
+host3虚拟机被干掉了。
+
+*** 管理远程Docker
+我们只需要更改更改环境变量就能让Docker客户端连接上远程主机上的Docker Daemon来进行操作。
+
+Docker Machine提供了一个 =env= 子命令来告诉你输入哪些命令可以连接到特定的机器上。
+
+#+BEGIN_SRC shell :results org
+  docker-machine env host1
+#+END_SRC
+
+#+BEGIN_SRC org
+export DOCKER_TLS_VERIFY="1"
+export DOCKER_HOST="tcp://192.168.99.100:2376"
+export DOCKER_CERT_PATH="/home/lujun9972/.docker/machine/machines/host1"
+export DOCKER_MACHINE_NAME="host1"
+# Run this command to configure your shell: 
+# eval $(docker-machine env host1)
+#+END_SRC
+
+按照说明，只需要执行 =eval $(docker-machine env host1)=, 之后Docker客户端的操作就都是在 =host1= 主机上进行的了。比如
+
+#+BEGIN_SRC shell :results org
+  echo "激活host1前"
+  echo "check docker machines"
+  docker-machine ls
+  echo "check docker images"
+  docker images |head -n 5
+
+  echo "激活host1后"
+  eval $(docker-machine env host1)
+  echo "check docker machines"
+  docker-machine ls
+  echo "check docker images"
+  docker images |head -n 5
+#+END_SRC
+
+#+BEGIN_SRC org
+激活host1前
+check docker machines
+NAME         ACTIVE   DRIVER       STATE     URL                         SWARM   DOCKER        ERRORS
+host1        -        virtualbox   Running   tcp://192.168.99.100:2376           v18.06.0-ce   
+host2        -        virtualbox   Running   tcp://192.168.99.101:2376           v18.06.0-ce   
+redis-host   -        virtualbox   Stopped                                       Unknown       
+check docker images
+REPOSITORY                     TAG                 IMAGE ID            CREATED             SIZE
+eaf                            latest              85aaf245545d        14 hours ago        1.97GB
+<none>                         <none>              071e13965b57        24 hours ago        1.97GB
+<none>                         <none>              2717978972e0        24 hours ago        1.97GB
+<none>                         <none>              86ac9d427d3f        24 hours ago        1.97GB
+激活host1后
+check docker machines
+NAME         ACTIVE   DRIVER       STATE     URL                         SWARM   DOCKER        ERRORS
+host1        *        virtualbox   Running   tcp://192.168.99.100:2376           v18.06.0-ce   
+host2        -        virtualbox   Running   tcp://192.168.99.101:2376           v18.06.0-ce   
+redis-host   -        virtualbox   Stopped                                       Unknown       
+check docker images
+REPOSITORY          TAG                 IMAGE ID            CREATED             SIZE
+#+END_SRC
+
+可以发现，激活host1前和激活host1主机后有两个不同点:
+
+1. 激活host1主机后，ACTIVE这一列，在 =host1= 这一行有一个 =*= 号标识
+2. 激活host1主机后，docker images变成空了，因为 =host1= 主机上并没有任何镜像。
+* Docker Daemon
+Docker1.12之后使用 =/etc/docker/daemon.json= 来配置daemon.
 
